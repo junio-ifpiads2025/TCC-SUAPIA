@@ -3,7 +3,7 @@ services:
     image: devlikeapro/waha:latest
     platform: linux/amd64
     environment:
-      WHATSAPP_HOOK_URL: http://host.docker.internal:5678/webhook/webhook
+      WHATSAPP_HOOK_URL: http://host.docker.internal:8002/webhook/
       WHATSAPP_DEFAULT_ENGINE: WEBJS
       WHATSAPP_HOOK_EVENTS: message.any
       WAHA_NO_API_KEY: true
@@ -30,5 +30,4 @@ services:
 volumes:
   waha_sessions:
   waha_media:
-  n8n_data:
   qdrant_storage:

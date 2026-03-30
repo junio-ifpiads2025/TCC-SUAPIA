@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.urls.url import router as ingestao_router
+from app.url.url import router as ingestao_router
 
 app = FastAPI(
     title="API de Ingestão Vetorial (RAG)",
