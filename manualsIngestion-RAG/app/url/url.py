@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from app.schemas.schema import IngestaoRequest, IngestaoResponse
-from app.controllers.controller import controller_ingestao
+from app.controller.controller import controller_ingestao
 
 router = APIRouter()
 
