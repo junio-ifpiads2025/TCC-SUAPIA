@@ -2,7 +2,7 @@
 .env
 
 # Se quiser pegar variações tipo .env.local, .env.dev, etc
-.env*
+.env/
 
 # Ignorar qualquer pasta venv (em qualquer nível)
 venv/
