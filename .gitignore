@@ -7,3 +7,8 @@
 # Ignorar qualquer pasta venv (em qualquer nível)
 venv/
 .venv/
+
+n8n_data/
+qdrant_storage/
+waha_media/
+waha_sessions/

@@ -12,3 +12,14 @@ services:
     restart: unless-stopped
     environment:
       -  ENV_VARIABLE=value
+
+  waha:
+    image: devlikeapro/waha
+    container_name: waha
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env # Já configurado com o motor mais leve que recomendei
+    volumes:
+      - ./waha_data:/app/.waha

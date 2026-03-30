@@ -15,3 +15,6 @@ O script lê os dados locais, divide os textos em blocos menores (chunks) preser
 **1. Instale as dependências:**
 ```bash
 pip install langchain langchain-openai langchain-qdrant qdrant-client python-dotenv
+
+https://waha.devlike.pro/blog/waha-on-docker/
+docker compose run --no-deps -v "$(pwd)":/app/env waha init-waha /app/env
