@@ -1,0 +1,7 @@
+langchain
+langchain-openai
+langchain-qdrant
+langchain-text-splitters
+qdrant-client
+python-dotenv
+ipykernel
