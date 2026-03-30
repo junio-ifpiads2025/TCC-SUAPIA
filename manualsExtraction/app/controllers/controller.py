@@ -1,4 +1,7 @@
 import asyncio
+import json
+import os
+from datetime import datetime
 from typing import List
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -29,8 +32,30 @@ async def processar_lote_controller(urls: List[str]) -> List[ManualResponse]:
     for i, resultado in enumerate(resultados):
         if isinstance(resultado, Exception):
             print(f"Falha na URL {urls[i]} -> {resultado}")
-            # Se preferir, você pode adicionar um dicionário de erro na lista de respostas
         else:
             respostas_finais.append(resultado)
+            
+    # --- NOVO: GERAR O ARQUIVO JSON LOCALMENTE ---
+    if respostas_finais:
+        try:
+            # Cria a pasta 'output' na raiz do manualsExtraction se não existir
+            os.makedirs("output", exist_ok=True)
+            
+            # Converte os modelos Pydantic para dicionários
+            # Nota: Usando .model_dump() para Pydantic v2. Se usar v1, mude para .dict()
+            dados_json = [resposta.model_dump() for resposta in respostas_finais]
+            
+            # Gera um nome de arquivo único com base no timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            caminho_arquivo = f"output/manuais_{timestamp}.json"
+            
+            # Salva o arquivo JSON com formatação legível (indent=4) e suportando acentos (ensure_ascii=False)
+            with open(caminho_arquivo, "w", encoding="utf-8") as f:
+                json.dump(dados_json, f, ensure_ascii=False, indent=4)
+                
+            print(f"✅ Arquivo JSON gerado com sucesso em: {caminho_arquivo}")
+        except Exception as e:
+            print(f"⚠️ Erro ao salvar o arquivo JSON: {e}")
+    # ---------------------------------------------
             
     return respostas_finais

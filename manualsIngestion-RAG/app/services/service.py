@@ -9,8 +9,10 @@ from app.schemas.schema import ManualResponse
 
 load_dotenv()
 
+# Pegando as variáveis do .env com valores padrão de fallback
 URL_QDRANT = os.getenv("QDRANT_URL", "http://localhost:6333")
-NOME_COLECAO = "manuais_suap_ifpi"
+NOME_COLECAO = os.getenv("QDRANT_COLLECTION", "manuais_suap_ifpi")
+MODELO_EMBEDDING = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
 
 def processar_vetorizacao(manuais: List[ManualResponse]) -> int:
     """Converte a lista de manuais em documentos vetoriais e envia para o Qdrant."""
@@ -43,7 +45,8 @@ def processar_vetorizacao(manuais: List[ManualResponse]) -> int:
     )
     blocos = text_splitter.split_documents(documentos)
 
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    # Utilizando o modelo vindo do .env
+    embeddings = OpenAIEmbeddings(model=MODELO_EMBEDDING)
     
     QdrantVectorStore.from_documents(
         blocos,
