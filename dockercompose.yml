@@ -3,7 +3,7 @@ services:
     image: devlikeapro/waha:latest
     platform: linux/amd64
     environment:
-      WHATSAPP_HOOK_URL: http://host.docker.internal:8002/webhook/
+      WHATSAPP_HOOK_URL: http://host.docker.internal:8002/webhook
       WHATSAPP_DEFAULT_ENGINE: WEBJS
       WHATSAPP_HOOK_EVENTS: message.any
       WAHA_NO_API_KEY: true
@@ -14,6 +14,8 @@ services:
       - ./waha_media:/app/.media
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   qdrant:
     image: qdrant/qdrant:latest
