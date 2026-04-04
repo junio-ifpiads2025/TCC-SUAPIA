@@ -1,0 +1,10 @@
+[
+  {
+    "pergunta": "Como faço para cancelar uma reserva de refeição?",
+    "resposta_esperada": "Para cancelar, acesse o menu: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Minhas Reservas, busque a reserva e clique no botão Cancelar."
+  },
+  {
+    "pergunta": "Onde vejo a justificativa de uma refeição não consumida?",
+    "resposta_esperada": "Você deve acessar o menu ATIVIDADES ESTUDANTIS - Restaurante Institucional - Minhas Reservas, buscar pela reserva e clicar no botão Ver Justificativa."
+  }
+]
