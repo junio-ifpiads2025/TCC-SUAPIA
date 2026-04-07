@@ -1,0 +1,70 @@
+{
+    "PEN SUAP": {
+        "urls":[
+            "https://manuais.ifpi.edu.br/books/pen-suap/export/html"
+        ]
+    },
+    "Procedimentos": {
+        "urls":[
+            "https://manuais.ifpi.edu.br/books/procedimentos-3SR/export/html"
+        ]
+    },
+    "SUAP Edu": {
+        "urls":[
+            "https://manuais.ifpi.edu.br/books/suap-edu/chapter/projetos-de-ensino-cadastro-e-configuracao-do-edital/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/chapter/projetos-de-ensino-submissao-de-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/page/projetos-de-ensino-pre-avaliacao-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/page/projetos-de-ensino-indicacao-de-avaliadores-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/chapter/projetos-de-ensino-avaliacoes-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/chapter/docentes/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/chapter/projetos-de-ensino-registro-da-execucao-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/page/projetos-de-ensino-registro-da-conclusao-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/chapter/coordenadores-de-curso/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/page/projetos-de-ensino-finalizacao-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/chapter/registro-academico/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/page/projetos-de-ensino-validacao-da-conclusao-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/chapter/equipe-pedagogica/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/chapter/estagios-docentes/export/html",
+            "https://manuais.ifpi.edu.br/books/suap-edu/page/estagio-docente/export/html"
+        ]
+    },
+    "Atividades Estudantis": {
+        "urls":[
+            "https://manuais.ifpi.edu.br/books/atividades-estudantis/export/html"
+        ]
+    },
+    "Catálogo Digital": {
+        "urls":[
+            "https://manuais.ifpi.edu.br/books/catalogo-digital/export/html"
+        ]
+    },
+    "Projeto de Ensino": {
+        "urls":[
+            "https://manuais.ifpi.edu.br/books/projeto-de-ensino/chapter/projetos-cadastro-e-configuracao-do-edital/export/html",
+            "https://manuais.ifpi.edu.br/books/projeto-de-ensino/chapter/projetos-submissao-de-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/projeto-de-ensino/page/projetos-pre-avaliacao-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/projeto-de-ensino/page/projetos-indicacao-de-avaliadores-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/projeto-de-ensino/chapter/projetos-avaliacoes-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/projeto-de-ensino/chapter/projetos-registro-da-execucao-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/projeto-de-ensino/chapter/projetos-monitoramento-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/projeto-de-ensino/page/projetos-registro-da-conclusao-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/projeto-de-ensino/page/projetos-finalizacao-do-projeto-de-ensino/export/html",
+            "https://manuais.ifpi.edu.br/books/projeto-de-ensino/page/projetos-validacao-da-conclusao-do-projeto-de-ensino/export/html"
+        ]
+    },
+    "Restaurante Institucional IFPI": {
+        "urls":[
+            "https://manuais.ifpi.edu.br/books/restaurante-institucional-ifpi/export/html"
+        ]
+    },
+    "Acesso ao SUAP": {
+        "urls":[
+            "https://manuais.ifpi.edu.br/books/acesso-ao-suap/export/html"
+        ]
+    },
+    "Competições Esportivas": {
+        "urls":[
+            "https://manuais.ifpi.edu.br/books/competicoes-esportivas/export/html"
+        ]
+    }
+}
