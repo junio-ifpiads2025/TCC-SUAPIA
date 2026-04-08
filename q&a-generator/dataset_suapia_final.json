@@ -1,0 +1,65 @@
+[
+    {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Restaurante Institucional IFPI",
+        "pergunta_humana": "E aí, tô tentando reservar uma refeição no Suap, mas não sei se preciso fazer algo antes de clicar no botão. O que eu preciso fazer?",
+        "resposta_esperada": "Pra reservar, você tem que tá matriculado, não pode reservar mais do que a quantidade de refeição liberada, e lembrar de fazer isso antes do horário de encerramento das reservas.",
+        "tipo_pergunta": "Procedimental"
+    },
+    {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Restaurante Institucional IFPI",
+        "pergunta_humana": "Tô meio perdido, como que eu faço pra cancelar uma reserva que eu fiz? Tem um prazo ou algo assim?",
+        "resposta_esperada": "Você pode cancelar sua reserva até 30 minutos antes do horário de encerramento das reservas, é só ir lá em 'Minhas Reservas' e clicar em 'Cancelar'.",
+        "tipo_pergunta": "Procedimental"
+    },
+    {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Restaurante Institucional IFPI",
+        "pergunta_humana": "Se eu não consumir a refeição que reservei, como que eu justifico isso pra poder reservar de novo depois?",
+        "resposta_esperada": "Você precisa justificar no setor responsável pra conseguir reservar o mesmo tipo de refeição novamente, senão vai ficar sem poder reservar.",
+        "tipo_pergunta": "Factual"
+    },
+    {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Área do Aluno - Visualizar Justificativa de Reservas de Refeições não Consumidas",
+        "pergunta_humana": "E aí, como que eu faço pra ver a justificativa das minhas reservas de refeição que eu não comi? Tô perdido!",
+        "resposta_esperada": "Pra ver a justificativa, você precisa acessar o menu ATIVIDADES ESTUDANTIS, depois Restaurante Institucional e clicar em Minhas Reservas. Aí é só buscar pela reserva e clicar no botão Ver Justificativa.",
+        "tipo_pergunta": "Procedimental"
+    },
+    {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Área do Aluno - Imprimir Carteirinha para Acesso ao Restaurante Institucional",
+        "pergunta_humana": "Oi, como que eu imprimo minha carteirinha do restaurante? Tô meio confuso com isso.",
+        "resposta_esperada": "Você precisa acessar sua conta do SUAP, clicar no seu perfil no canto superior esquerdo, depois ir em Documentos e clicar em Imprimir Carteirinha. Você pode usar a carteirinha no celular ou impressa.",
+        "tipo_pergunta": "Procedimental"
+    },
+    {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Área da Diretoria de Assistência Estudantil - Relatório das Refeições",
+        "pergunta_humana": "Como que eu vejo o relatório das refeições? Tô tentando, mas não tô achando!",
+        "resposta_esperada": "Pra ver o relatório, você precisa acessar o SUAP, ir em ATIVIDADES ESTUDANTIS, depois Restaurante Institucional e clicar em Relatório Refeições. Lembrando que o relatório só mostra as refeições dos campus que estão liberadas.",
+        "tipo_pergunta": "Procedimental"
+    },
+    {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Tô tentando entender como funciona essa parada de reservas de refeição no SUAP.",
+        "pergunta_humana": "Oq eu faço pra justificar uma refeição que não consuma, tipo, onde eu clico?",
+        "resposta_esperada": "Você deve acessar ATIVIDADES ESTUDANTIS - Restaurante Institucional - Reservas Refeições, preencher o formulário de justificativa e salvar.",
+        "tipo_pergunta": "Procedimental"
+    },
+    {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Tô perdido, não sei como puxar as reservas do SUAP pro restaurante, me ajuda?",
+        "pergunta_humana": "Como que eu puxo as reservas do SUAP pro restaurante, mano?",
+        "resposta_esperada": "Clique no botão 'Opções' no canto superior esquerdo, depois em 'Sincronizar com Suap' e, por último, clique em 'Puxar Reservas Refeições'.",
+        "tipo_pergunta": "Procedimental"
+    },
+    {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Não entendi essa parte do acesso ao restaurante, o que acontece se eu não tiver reserva?",
+        "pergunta_humana": "Se eu não tiver reserva da refeição, oq acontece quando eu tentar acessar o restaurante?",
+        "resposta_esperada": "Se você não tiver reserva da refeição informada, seu acesso não será permitido.",
+        "tipo_pergunta": "Factual"
+    }
+]
