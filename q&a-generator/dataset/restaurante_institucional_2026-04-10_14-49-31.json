@@ -1,0 +1,72 @@
+{
+    "pergunta 1": {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Acesse sua conta do suap\nAcesse o menu:\nATIVIDADES ESTUDANTIS - Restaurante Institucional - Reservar Refeições\nClique no botão Reservar da refeição disponível para reserva",
+        "pergunta_humana": "E aí, tô meio perdido, como faz pra reservar minha quentinha usando a conta do SUAP? Oq eu clico?",
+        "resposta_esperada": "Para reservar sua refeição com acesso à conta do SUAP, você deve acessar sua conta, ir no menu 'ATIVIDADES ESTUDANTIS', depois em 'Restaurante Institucional' e 'Reservar Refeições'. Lá, é só clicar no botão 'Reservar' da refeição que estiver disponível.",
+        "tipo_pergunta": "Procedimental"
+    },
+    "pergunta 2": {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Acesse a página inicial do Suap (página de Login IFPI) e vá em ATIVIDADES ESTUDANTIS - Refeições\nSelecione o campus e depois clique no botão Enviar\nCaso exista refeições liberadas para reservas, clique no botão Reservar\nInforme sua matrícula e data de nascimento",
+        "pergunta_humana": "Tipo, se eu não tiver logado no SUAP, tem como reservar a comida? Oq eu faço pra isso?",
+        "resposta_esperada": "Sim, você pode reservar sem estar logado. Acesse a página inicial do SUAP (onde você faz login), vá em 'ATIVIDADES ESTUDANTIS - Refeições', selecione o campus, clique em 'Enviar' e, se tiver refeições liberadas, clique em 'Reservar'. Aí é só informar sua matrícula e data de nascimento.",
+        "tipo_pergunta": "Procedimental"
+    },
+    "pergunta 3": {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Para que a reserva seja realizada com sucesso é necessário atender os requisitos abaixo:\n- Aluno precisa está matriculado\n- A quantidade de reservas não podem ser igual a quantidade da refeição liberada\n- Aguarde o início das reservas\n- Reservar antes do horário de encerramento das reservas",
+        "pergunta_humana": "Pra conseguir reservar a comida, tem alguma regra que eu preciso seguir? Tipo, tô confuso com esses requisitos.",
+        "resposta_esperada": "Sim, para reservar com sucesso, você precisa estar matriculado, a quantidade de reservas não pode ser igual à quantidade de refeições liberadas, e você deve aguardar o início das reservas e fazê-las antes do horário de encerramento.",
+        "tipo_pergunta": "Factual"
+    },
+    "pergunta 4": {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Acesse o menu:\nATIVIDADES ESTUDANTIS - Restaurante Institucional - Minhas Reservas",
+        "pergunta_humana": "Beleza, reservei, mas agora não sei onde ver as reservas que eu fiz. Onde eu acho isso?",
+        "resposta_esperada": "Para buscar suas reservas, você deve ir no menu 'ATIVIDADES ESTUDANTIS', depois em 'Restaurante Institucional' e selecionar 'Minhas Reservas'.",
+        "tipo_pergunta": "Procedimental"
+    },
+    "pergunta 5": {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Acesse o menu:\nATIVIDADES ESTUDANTIS - Restaurante Institucional - Minhas Reservas\nBusque a reserva que deseja cancelar\nClique no botão Cancelar",
+        "pergunta_humana": "Ai, não vou conseguir ir na hora da refeição, como faço pra cancelar minha reserva? Tem como?",
+        "resposta_esperada": "Sim, tem como cancelar. Você precisa acessar o menu 'ATIVIDADES ESTUDANTIS', depois 'Restaurante Institucional' e 'Minhas Reservas'. Lá, você busca a reserva que quer cancelar e clica no botão 'Cancelar'.",
+        "tipo_pergunta": "Procedimental"
+    },
+    "pergunta 6": {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "O aluno pode cancelar sua reserva até 30 min antes do horário de encerramento das reservas.",
+        "pergunta_humana": "Até quando eu posso cancelar a reserva da comida? Tipo, tô com medo de perder o prazo.",
+        "resposta_esperada": "Você pode cancelar sua reserva até 30 minutos antes do horário de encerramento das reservas.",
+        "tipo_pergunta": "Factual"
+    },
+    "pergunta 7": {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Caso o aluno faça uma reserva e não consumir, ele fica sem poder reservar posteriormente o mesmo tipo de refeição não consumida até que se justifique no setor responsável.",
+        "pergunta_humana": "E se eu reservar a comida e não for pegar? Oq acontece comigo? Fico sem poder reservar depois?",
+        "resposta_esperada": "Se você reservar e não consumir a refeição, ficará sem poder reservar o mesmo tipo de refeição novamente até que justifique sua ausência no setor responsável.",
+        "tipo_pergunta": "Factual"
+    },
+    "pergunta 8": {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Imprimir Carteirinha para Acesso ao Restaurante Institucional",
+        "pergunta_humana": "Pra entrar no Restaurante Institucional, precisa de alguma carteirinha? Como eu faço pra conseguir uma?",
+        "resposta_esperada": "Sim, existe a opção de 'Imprimir Carteirinha para Acesso ao Restaurante Institucional'.",
+        "tipo_pergunta": "Factual"
+    },
+    "pergunta 9": {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Visualizar Justificativa de Reservas de Refeições não Consumidas",
+        "pergunta_humana": "Ah, e se eu não for pegar a comida e tiver que justificar, tem como eu ver a justificativa depois?",
+        "resposta_esperada": "Sim, existe uma funcionalidade para 'Visualizar Justificativa de Reservas de Refeições não Consumidas' na Área do Aluno.",
+        "tipo_pergunta": "Factual"
+    },
+    "pergunta 10": {
+        "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)",
+        "contexto_base": "Área do Aluno\nReservar Refeição com Acesso a Conta do Suap\nReservar Refeição sem Acesso a Conta do Suap\nBuscar Reservas\nCancelar Reserva\nVisualizar Justificativa de Reservas de Refeições não Consumidas\nImprimir Carteirinha para Acesso ao Restaurante Institucional",
+        "pergunta_humana": "Tô meio perdido, oq um aluno consegue fazer nesse sistema de restaurante do SUAP? Tipo, quais as opções?",
+        "resposta_esperada": "Na Área do Aluno, você pode: reservar refeição com ou sem acesso à conta do SUAP, buscar suas reservas, cancelar reservas, visualizar justificativas de refeições não consumidas e imprimir sua carteirinha para acesso ao Restaurante Institucional.",
+        "tipo_pergunta": "Factual"
+    }
+}

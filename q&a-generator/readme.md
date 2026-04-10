@@ -1,7 +1,7 @@
 🤖 SUAPIA: Gerador de Dataset Sintético (Q&A)
 Este repositório contém o script de automação para a criação do Golden Dataset do projeto SUAPIA, um assistente virtual baseado em arquitetura RAG (Retrieval-Augmented Generation) focado em fornecer suporte à comunidade do IFPI sobre o sistema SUAP.
 
-O script realiza a extração do texto dos manuais oficiais do SUAP e utiliza o modelo gpt-4o-mini da OpenAI para gerar perguntas e respostas orgânicas, simulando as dores e dúvidas reais de diferentes perfis de usuários (Alunos, Professores, Coordenadores).
+O script realiza a extração do texto dos manuais oficiais do SUAP e utiliza o modelo gemini-2.5-flash para gerar perguntas e respostas orgânicas, simulando as dores e dúvidas reais de diferentes perfis de usuários (Alunos, Professores, Coordenadores).
 
 ✨ Funcionalidades
 Web Scraping Automatizado: Extrai conteúdo textual diretamente das URLs dos manuais do IFPI.

@@ -3,22 +3,24 @@ import os
 import requests
 import datetime
 from bs4 import BeautifulSoup
-from openai import OpenAI
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
+import time
 
 # 1. Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
+api_key = os.getenv("GEMINI_API_KEY")
 prompt_system = os.getenv("PROMPT_SYSTEM")
 
 if not api_key:
-    raise ValueError("Chave da API da OpenAI não encontrada! Verifique se o arquivo .env existe e contém OPENAI_API_KEY.")
+    raise ValueError("Chave da API do Google não encontrada! Verifique se o arquivo .env existe e contém GEMINI_API_KEY.")
 
 if not prompt_system:
     raise ValueError("Prompt do sistema não encontrado! Verifique se o arquivo .env existe e contém PROMPT_SYSTEM.")
 
-# Configura o cliente da OpenAI com a chave segura
-client = OpenAI(api_key=api_key)
+# Configura o NOVO cliente do Gemini
+client = genai.Client(api_key=api_key)
 
 def extrair_texto_da_url(url):
     print(f"Acessando: {url}")
@@ -38,26 +40,34 @@ def dividir_em_chunks(texto, tamanho_max=3000):
     return chunks
 
 def gerar_perguntas_com_ia(chunk_de_texto, persona_alvo, qtd_perguntas):
-    # Agora injetamos tanto a persona quanto a QUANTIDADE dinamicamente
+    # Injetamos a persona e a quantidade dinamicamente no prompt do sistema
     prompt_sistema = prompt_system.format(
         persona_alvo=persona_alvo, 
         qtd_perguntas=qtd_perguntas
     )
     
     try:
-        completion = client.chat.completions.create(
-            model="gpt-4o-mini",
-            response_format={ "type": "json_object" },
-            temperature=0.7,
-            messages=[
-                {"role": "system", "content": prompt_sistema},
-                {"role": "user", "content": f"Trecho do manual:\n\n{chunk_de_texto}"}
-            ]
+        prompt_usuario = f"Trecho do manual:\n\n{chunk_de_texto}"
+        
+        # Chamada usando a nova SDK
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt_usuario,
+            config=types.GenerateContentConfig(
+                system_instruction=prompt_sistema,
+                temperature=0.7,
+                response_mime_type="application/json"
+            )
         )
-        resposta_json = json.loads(completion.choices[0].message.content)
+        
+        # Faz o parse do texto gerado para dicionário Python
+        resposta_json = json.loads(response.text)
+        
+        # Retorna a lista 'qna' conforme a estrutura esperada pelo seu código
         return resposta_json.get('qna', [])
+        
     except Exception as e:
-        print(f"Erro na API: {e}")
+        print(f"Erro na API do Gemini: {e}")
         return []
 
 def main():
@@ -98,7 +108,7 @@ def main():
         chunks = dividir_em_chunks(texto_completo)
         
         perguntas_faltantes = cota_deste_manual
-        
+
         for chunk in chunks:
             # Se já bateu a cota deste manual, interrompe a leitura dos chunks e vai pro próximo livro
             if perguntas_faltantes <= 0:
@@ -112,6 +122,11 @@ def main():
                 # Abate da cota o que a IA conseguiu gerar
                 perguntas_faltantes -= len(perguntas_geradas)
                 print(f" -> Geradas: {len(perguntas_geradas)} | Faltam: {max(0, perguntas_faltantes)}")
+                
+                # NOVO: Pausa para não estourar a cota gratuita da API
+                if perguntas_faltantes > 0:
+                    print(" -> Aguardando 20 segundos para respeitar o limite gratuito da API...")
+                    time.sleep(20)
         
         # Salva apenas se gerou alguma coisa
         if dataset_manual_atual:
