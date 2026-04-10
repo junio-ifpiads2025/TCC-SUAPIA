@@ -1,68 +1,93 @@
-🤖 SUAPIA: Gerador de Dataset Sintético (Q&A)
-Este repositório contém o script de automação para a criação do Golden Dataset do projeto SUAPIA, um assistente virtual baseado em arquitetura RAG (Retrieval-Augmented Generation) focado em fornecer suporte à comunidade do IFPI sobre o sistema SUAP.
+# SUAPIA: Gerador de Dataset Sintético (Q&A) para Avaliação RAG
 
-O script realiza a extração do texto dos manuais oficiais do SUAP e utiliza o modelo gemini-2.5-flash para gerar perguntas e respostas orgânicas, simulando as dores e dúvidas reais de diferentes perfis de usuários (Alunos, Professores, Coordenadores).
+Este repositório contém o script de automação para a criação do *Golden Dataset* do projeto SUAPIA. A sua função principal é **gerar um conjunto de dados de perguntas e respostas para validar o Chatbot RAG utilizando o framework [Ragas](https://docs.ragas.io/)**, eliminando a necessidade de testes humanos extensivos e manuais.
 
-✨ Funcionalidades
-Web Scraping Automatizado: Extrai conteúdo textual diretamente das URLs dos manuais do IFPI.
+O script realiza o *web scraping* dos manuais oficiais do SUAP em HTML e utiliza os modelos do **Google Gemini** para gerar perguntas e respostas orgânicas. Ele simula as dores e dúvidas reais de diferentes perfis de usuários (Alunos, Professores, Coordenadores) para testar o sistema em cenários próximos ao uso real.
 
-Chunking Inteligente: Divide textos longos de forma lógica para evitar estouro de tokens e perda de contexto na LLM.
+## Funcionalidades
 
-Injeção de Personas: Gera dados orgânicos (com gírias, contrações e narrativas) baseados no perfil do usuário alvo.
+* **Otimizado para o Ragas:** Formata os dados de saída como uma **lista plana de objetos JSON** com campos compatíveis (`user_input`, `reference`, `reference_contexts`), prontos para carregar via HuggingFace Datasets.
+* **Web Scraping Automatizado:** Extrai conteúdo textual diretamente das URLs dos manuais do IFPI utilizando `BeautifulSoup`.
+* **Chunking Inteligente:** Divide textos longos de forma lógica para respeitar os limites de contexto da LLM durante a geração das perguntas.
+* **Injeção de Personas Dinâmica:** Gera perguntas baseadas no perfil do usuário alvo (ex: aluno calouro informal), tornando as requisições sintéticas mais realistas e desafiadoras para o RAG.
+* **Modelo Configurável:** Permite alternar facilmente entre diferentes modelos do Gemini (ex: Flash, Pro) diretamente pelo arquivo `.env`.
+* **Retry com Backoff Exponencial:** Reage automaticamente a falhas de rede ou rate limits da API, com até 3 tentativas por chunk.
 
-Saída Estruturada: Retorna os dados rigorosamente em formato JSON, prontos para a etapa de validação com o framework RAGAS.
+## Pré-requisitos
 
-🛠️ Pré-requisitos
-Certifique-se de ter o Python (versão 3.8 ou superior) instalado em sua máquina. Além disso, você precisará de uma chave de API válida da OpenAI.
+* **Python 3.10+** instalado.
+* Uma chave de API válida do **Google Gemini** (Google AI Studio).
 
-🚀 Instalação
-Clone este repositório:
+## Instalação e Configuração
 
-Bash
-git clone https://github.com/seu-usuario/suapia-dataset-generator.git
-cd suapia-dataset-generator
-Crie um ambiente virtual (recomendado):
+**1. Navegue até a pasta do módulo e crie o ambiente virtual (opcional, mas recomendado):**
 
-Bash
+```bash
+cd q&a-generator
 python -m venv venv
-source venv/bin/activate  # No Windows use: venv\Scripts\activate
-Instale as dependências necessárias:
+# Linux/Mac:
+source venv/bin/activate
+# Windows:
+venv\Scripts\activate
+```
 
-Bash
-pip install openai requests beautifulsoup4
-💻 Como Usar
-Abra o arquivo gerador_qa_suapia.py em seu editor de código.
+**2. Instale as dependências:**
 
-Localize a variável de configuração da API e insira a sua chave:
+```bash
+pip install -r requirements.txt
+```
 
-Python
-client = OpenAI(api_key="sk-SUA_CHAVE_AQUI")
-Na lista tarefas_geracao, configure as URLs dos manuais que deseja processar e a Persona correspondente para cada um:
+**3. Configure as variáveis de ambiente:**
 
-Python
-tarefas_geracao = [
-    {
-        "livro": "Nome do Manual",
-        "url": "https://manuais.ifpi.edu.br/...",
-        "persona": "Descrição detalhada do perfil..."
-    }
-]
-Execute o script:
+Renomeie ou copie o arquivo `.env.example` para `.env` e preencha as informações:
 
-Bash
-python gerador_qa_suapia.py
-O script irá iterar pelas tarefas, logar o progresso no terminal e, ao finalizar, salvará um arquivo dataset_suapia_personas.json na raiz do diretório.
+```env
+GEMINI_API_KEY=sua_chave_api_do_google_aqui
+PROMPT_SYSTEM="Você é um assistente encarregado de gerar {qtd_perguntas} perguntas no formato JSON simulando a persona: {persona_alvo}..."
+GEMINI_MODEL=gemini-2.5-flash
+QTD_PERGUNTAS=10
+```
 
-📂 Estrutura do Dataset Gerado
-O arquivo JSON de saída terá a seguinte estrutura, ideal para ser consumido por pipelines de avaliação RAG:
+> Você pode alterar `GEMINI_MODEL` para `gemini-2.5-pro` para testar um modelo com maior capacidade de raciocínio.  
+> `QTD_PERGUNTAS` define a meta global de perguntas, distribuída igualmente entre todos os manuais.
 
-JSON
+**4. Configure as fontes (URLs e Personas):**
+
+Edite o arquivo `manuais.json` com os manuais que você deseja processar:
+
+```json
 [
   {
-    "persona": "Aluno Calouro",
-    "contexto_base": "Texto extraído do manual original...",
-    "pergunta_humana": "Suapia, eu sou aluno novo e não me deixaram almoçar sem reserva, o que faço?",
-    "resposta_esperada": "Você precisa realizar a reserva no sistema SUAP até as 09:00h...",
-    "tipo_pergunta": "Procedimental"
+    "livro": "Restaurante Institucional",
+    "url": "https://manuais.ifpi.edu.br/books/restaurante-institucional-ifpi/export/html",
+    "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)"
   }
 ]
+```
+
+## Como Usar
+
+Com as dependências instaladas e o `.env` configurado, execute o script principal:
+
+```bash
+python main.py
+```
+
+## Formato de Saída
+
+Cada arquivo gerado em `dataset/` é uma lista JSON plana compatível com o Ragas:
+
+```json
+[
+  {
+    "user_input": "Como faço para reservar uma refeição?",
+    "reference": "Acesse ATIVIDADES ESTUDANTIS > Refeições e clique em Reservar.",
+    "reference_contexts": ["Trecho do manual usado para gerar esta pergunta..."],
+    "persona": "Aluno Calouro",
+    "tipo_pergunta": "Procedimental",
+    "contexto_base": "Descrição resumida do contexto"
+  }
+]
+```
+
+Os campos `user_input`, `reference` e `reference_contexts` são os exigidos pelo Ragas para calcular métricas como *faithfulness* e *context_precision*.

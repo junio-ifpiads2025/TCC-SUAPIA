@@ -1,147 +1,159 @@
 import json
 import os
+import time
 import requests
 import datetime
+from pathlib import Path
 from bs4 import BeautifulSoup
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
-import time
 
-# 1. Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
 prompt_system = os.getenv("PROMPT_SYSTEM")
+modelo_gemini = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+meta_global = int(os.getenv("QTD_PERGUNTAS", "10"))
 
 if not api_key:
     raise ValueError("Chave da API do Google não encontrada! Verifique se o arquivo .env existe e contém GEMINI_API_KEY.")
-
 if not prompt_system:
     raise ValueError("Prompt do sistema não encontrado! Verifique se o arquivo .env existe e contém PROMPT_SYSTEM.")
 
-# Configura o NOVO cliente do Gemini
 client = genai.Client(api_key=api_key)
 
-def extrair_texto_da_url(url):
+BASE_DIR = Path(__file__).parent
+DELAY_ENTRE_CHAMADAS = 2  # segundos entre chamadas à API
+MAX_TENTATIVAS = 3
+
+
+def extrair_texto_da_url(url: str) -> str:
     print(f"Acessando: {url}")
-    response = requests.get(url)
+    response = requests.get(url, timeout=30)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, 'html.parser')
     return soup.get_text(separator='\n', strip=True)
 
-def dividir_em_chunks(texto, tamanho_max=3000):
+
+def dividir_em_chunks(texto: str, tamanho_max: int = 3000) -> list[str]:
     chunks = []
     while len(texto) > tamanho_max:
         ponto_de_corte = texto.rfind('.', 0, tamanho_max)
-        if ponto_de_corte == -1: ponto_de_corte = tamanho_max
-        chunks.append(texto[:ponto_de_corte+1])
-        texto = texto[ponto_de_corte+1:].strip()
-    chunks.append(texto)
+        if ponto_de_corte == -1:
+            ponto_de_corte = tamanho_max
+        chunks.append(texto[:ponto_de_corte + 1])
+        texto = texto[ponto_de_corte + 1:].strip()
+    if texto:
+        chunks.append(texto)
     return chunks
 
-def gerar_perguntas_com_ia(chunk_de_texto, persona_alvo, qtd_perguntas):
-    # Injetamos a persona e a quantidade dinamicamente no prompt do sistema
+
+def gerar_perguntas_com_ia(chunk: str, persona_alvo: str, qtd_perguntas: int) -> list[dict]:
     prompt_sistema = prompt_system.format(
-        persona_alvo=persona_alvo, 
+        persona_alvo=persona_alvo,
         qtd_perguntas=qtd_perguntas
     )
-    
-    try:
-        prompt_usuario = f"Trecho do manual:\n\n{chunk_de_texto}"
-        
-        # Chamada usando a nova SDK
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt_usuario,
-            config=types.GenerateContentConfig(
-                system_instruction=prompt_sistema,
-                temperature=0.7,
-                response_mime_type="application/json"
+    prompt_usuario = f"Trecho do manual:\n\n{chunk}"
+
+    for tentativa in range(1, MAX_TENTATIVAS + 1):
+        try:
+            response = client.models.generate_content(
+                model=modelo_gemini,
+                contents=prompt_usuario,
+                config=types.GenerateContentConfig(
+                    system_instruction=prompt_sistema,
+                    temperature=0.7,
+                    response_mime_type="application/json"
+                )
             )
-        )
-        
-        # Faz o parse do texto gerado para dicionário Python
-        resposta_json = json.loads(response.text)
-        
-        # Retorna a lista 'qna' conforme a estrutura esperada pelo seu código
-        return resposta_json.get('qna', [])
-        
-    except Exception as e:
-        print(f"Erro na API do Gemini: {e}")
-        return []
+            resposta_json = json.loads(response.text)
+            itens = resposta_json.get('qna', [])
+
+            # Mapeia para campos compatíveis com o Ragas, preservando metadados
+            resultado = []
+            for item in itens:
+                resultado.append({
+                    "user_input": item.get("pergunta_humana", ""),
+                    "reference": item.get("resposta_esperada", ""),
+                    "reference_contexts": [chunk],
+                    "persona": item.get("persona", persona_alvo),
+                    "tipo_pergunta": item.get("tipo_pergunta", ""),
+                    "contexto_base": item.get("contexto_base", ""),
+                })
+            return resultado
+
+        except Exception as e:
+            print(f"  [Tentativa {tentativa}/{MAX_TENTATIVAS}] Erro na API: {e}")
+            if tentativa < MAX_TENTATIVAS:
+                espera = 2 ** tentativa
+                print(f"  Aguardando {espera}s antes de tentar novamente...")
+                time.sleep(espera)
+
+    print("  Todas as tentativas falharam. Pulando este chunk.")
+    return []
+
 
 def main():
-    arquivo_config_manuais = "manuais.json"
-    
+    arquivo_config = BASE_DIR / "manuais.json"
+
     try:
-        with open(arquivo_config_manuais, 'r', encoding='utf-8') as f:
-            tarefas_geracao = json.load(f)
+        with open(arquivo_config, 'r', encoding='utf-8') as f:
+            tarefas = json.load(f)
     except Exception as e:
-        print(f"ERRO ao ler {arquivo_config_manuais}: {e}")
+        print(f"ERRO ao ler {arquivo_config}: {e}")
         return
 
-    pasta_saida = "dataset"
-    os.makedirs(pasta_saida, exist_ok=True)
-    
-    # --- CONFIGURAÇÃO DA META GLOBAL ---
-    META_GLOBAL_PERGUNTAS = 10
-    qtd_links = len(tarefas_geracao)
-    
-    # Matemática para distribuir as perguntas igualmente (e lidar com restos da divisão)
-    cotas_por_link = [META_GLOBAL_PERGUNTAS // qtd_links + (1 if i < META_GLOBAL_PERGUNTAS % qtd_links else 0) for i in range(qtd_links)]
-    
-    print(f"Iniciando processamento. Meta global: {META_GLOBAL_PERGUNTAS} perguntas distribuídas em {qtd_links} manuais.\n")
-    
-    for indice_tarefa, tarefa in enumerate(tarefas_geracao):
-        cota_deste_manual = cotas_por_link[indice_tarefa]
+    pasta_saida = BASE_DIR / "dataset"
+    pasta_saida.mkdir(exist_ok=True)
+
+    qtd_links = len(tarefas)
+    cotas = [
+        meta_global // qtd_links + (1 if i < meta_global % qtd_links else 0)
+        for i in range(qtd_links)
+    ]
+
+    print(f"Meta global: {meta_global} perguntas distribuídas em {qtd_links} manual(is).")
+    print(f"Modelo configurado: {modelo_gemini}\n")
+
+    for i, tarefa in enumerate(tarefas):
+        cota = cotas[i]
         nome_livro = tarefa['livro']
-        
-        print(f"--- Processando: {nome_livro} | Cota: {cota_deste_manual} pergunta(s) ---")
-        
-        # Se a cota for 0, pula o manual
-        if cota_deste_manual == 0:
+
+        print(f"--- Processando: {nome_livro} | Cota: {cota} pergunta(s) ---")
+
+        if cota == 0:
             print(" -> Cota zero para este manual. Pulando.")
             continue
-            
-        dataset_manual_atual = []
-        texto_completo = extrair_texto_da_url(tarefa['url'])
-        chunks = dividir_em_chunks(texto_completo)
-        
-        perguntas_faltantes = cota_deste_manual
 
-        for chunk in chunks:
-            # Se já bateu a cota deste manual, interrompe a leitura dos chunks e vai pro próximo livro
-            if perguntas_faltantes <= 0:
+        dataset_manual: list[dict] = []
+        texto = extrair_texto_da_url(tarefa['url'])
+        chunks = dividir_em_chunks(texto)
+        faltam = cota
+
+        for j, chunk in enumerate(chunks):
+            if faltam <= 0:
                 break
-                
-            if len(chunk) > 100:
-                # Pede apenas a quantidade que falta para bater a cota
-                perguntas_geradas = gerar_perguntas_com_ia(chunk, tarefa['persona'], perguntas_faltantes)
-                dataset_manual_atual.extend(perguntas_geradas)
-                
-                # Abate da cota o que a IA conseguiu gerar
-                perguntas_faltantes -= len(perguntas_geradas)
-                print(f" -> Geradas: {len(perguntas_geradas)} | Faltam: {max(0, perguntas_faltantes)}")
-                
-                # NOVO: Pausa para não estourar a cota gratuita da API
-                if perguntas_faltantes > 0:
-                    print(" -> Aguardando 20 segundos para respeitar o limite gratuito da API...")
-                    time.sleep(20)
-        
-        # Salva apenas se gerou alguma coisa
-        if dataset_manual_atual:
-            dataset_formatado = {}
-            for index, item in enumerate(dataset_manual_atual, start=1):
-                dataset_formatado[f"pergunta {index}"] = item
-                
-            data_atual = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            nome_arquivo_limpo = nome_livro.replace(" ", "_").lower()
-            caminho_arquivo = os.path.join(pasta_saida, f"{nome_arquivo_limpo}_{data_atual}.json")
-            
-            with open(caminho_arquivo, 'w', encoding='utf-8') as f:
-                json.dump(dataset_formatado, f, ensure_ascii=False, indent=4)
-                
-            print(f"✅ Arquivo salvo: {caminho_arquivo}\n")
+            if len(chunk) <= 100:
+                continue
+
+            if j > 0:
+                time.sleep(DELAY_ENTRE_CHAMADAS)
+
+            gerados = gerar_perguntas_com_ia(chunk, tarefa['persona'], faltam)
+            dataset_manual.extend(gerados)
+            faltam -= len(gerados)
+            print(f" -> Geradas: {len(gerados)} | Faltam: {max(0, faltam)}")
+
+        if dataset_manual:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            nome_arquivo = nome_livro.replace(" ", "_").lower()
+            caminho = pasta_saida / f"{nome_arquivo}_{timestamp}.json"
+
+            with open(caminho, 'w', encoding='utf-8') as f:
+                json.dump(dataset_manual, f, ensure_ascii=False, indent=4)
+
+            print(f"✅ Arquivo salvo: {caminho}\n")
+
 
 if __name__ == "__main__":
     main()
