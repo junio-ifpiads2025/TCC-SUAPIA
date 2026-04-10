@@ -59,8 +59,18 @@ Edite o arquivo `manuais.json` com os manuais que você deseja processar:
 [
   {
     "livro": "Restaurante Institucional",
-    "url": "https://manuais.ifpi.edu.br/books/restaurante-institucional-ifpi/export/html",
+    "urls": [
+      "https://manuais.ifpi.edu.br/books/restaurante-institucional-ifpi/export/html"
+    ],
     "persona": "Aluno Calouro (informal, usa gírias como 'tô', 'oq', está confuso com o sistema)"
+  },
+  {
+    "livro": "SUAP Edu",
+    "urls": [
+      "https://manuais.ifpi.edu.br/books/suap-edu/chapter/docentes/export/html",
+      "https://manuais.ifpi.edu.br/books/suap-edu/chapter/coordenadores-de-curso/export/html"
+    ],
+    "persona": "Professor (objetivo, linguagem técnica, quer eficiência)"
   }
 ]
 ```

@@ -126,7 +126,10 @@ def main():
             continue
 
         dataset_manual: list[dict] = []
-        texto = extrair_texto_da_url(tarefa['url'])
+        partes_texto = []
+        for url in tarefa['urls']:
+            partes_texto.append(extrair_texto_da_url(url))
+        texto = "\n\n".join(partes_texto)
         chunks = dividir_em_chunks(texto)
         faltam = cota
 
