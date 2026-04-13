@@ -1,127 +1,140 @@
-# 📖 SUAPIA - Assistente Virtual RAG para o SUAP (IFPI)
+# SUAPIA - Assistente Virtual RAG para o SUAP (IFPI)
 
-Este projeto é um sistema baseado em Inteligência Artificial (RAG - *Retrieval-Augmented Generation*) desenvolvido para atuar como um assistente virtual integrado ao WhatsApp. O objetivo é tirar dúvidas e fornecer orientações sobre os manuais do sistema SUAP do IFPI.
+Sistema de Inteligência Artificial baseado em **RAG (Retrieval-Augmented Generation)** desenvolvido para atuar como assistente virtual integrado ao WhatsApp. O objetivo é responder dúvidas e fornecer orientações sobre os manuais do sistema SUAP do IFPI.
 
-A arquitetura é dividida em três microsserviços independentes construídos com **FastAPI**, além de serviços de infraestrutura rodando em **Docker**.
+## Visão Geral da Arquitetura
 
-## 🏗️ Arquitetura do Projeto
+O projeto é dividido em microsserviços independentes construídos com **FastAPI** e serviços de infraestrutura em **Docker**:
 
-1. **Infraestrutura (Docker):** Banco de dados vetorial (Qdrant) e API do WhatsApp (WAHA).
-2. **`manualsExtraction`:** API para download de URLs e extração inteligente do HTML dos manuais do SUAP.
-3. **`manualsIngestion-RAG`:** API para quebrar os textos extraídos em blocos (chunks), gerar embeddings via OpenAI e armazenar no Qdrant.
-4. **`chat-bot`:** API que atua como Webhook para o WAHA, recebe as mensagens do WhatsApp, busca o contexto no Qdrant e gera a resposta usando a LLM da OpenAI.
+```
+TCC-SUAPIA/
+├── dockercompose.yml          # Infraestrutura Docker (WAHA)
+├── links.json                 # URLs dos manuais do SUAP
+├── manualsExtraction/         # Serviço de extração de HTML (porta 8000)
+├── manualsIngestion-RAG/      # Serviço de vetorização e ingestão (porta 8001)
+├── chat-bot/                  # Webhook RAG para WhatsApp (porta 8002)
+└── q&a-generator/             # Gerador de datasets sintéticos para avaliação
+```
+
+### Fluxo de Dados
+
+**Pipeline de Ingestão:**
+```
+links.json → manualsExtraction (porta 8000) → manualsIngestion-RAG (porta 8001) → PostgreSQL pgvector
+```
+
+**Pipeline de Resposta:**
+```
+WhatsApp → WAHA (Docker) → chat-bot webhook (porta 8002) → pgvector + OpenAI → WhatsApp
+```
 
 ---
 
-## ⚙️ 1. Pré-requisitos e Infraestrutura Base
+## Pré-requisitos
 
-Antes de rodar os microsserviços em Python, você precisa ter o **Docker** e o **Docker Compose** instalados, além de uma chave de API da OpenAI.
+- Docker e Docker Compose
+- Python 3.10+
+- Chave de API da OpenAI
+- PostgreSQL com a extensão **pgvector** instalada
 
-### Subindo o Qdrant e o WAHA
-Na raiz do projeto, utilize o arquivo `docker-compose.yml` para iniciar o banco vetorial e o motor do WhatsApp:
+---
+
+## 1. Infraestrutura Base (Docker)
+
+O arquivo `dockercompose.yml` sobe o **WAHA**, motor de integração com o WhatsApp:
 
 ```bash
 docker compose up -d
 ```
 
-* **Qdrant:** Estará rodando em `http://localhost:6333`
-* **WAHA (WhatsApp API):** Estará rodando em `http://localhost:3000`
+- **WAHA (WhatsApp API):** `http://localhost:3000`
+
+> **Banco de vetores (pgvector):** O projeto utiliza PostgreSQL com a extensão pgvector. Certifique-se de que uma instância do PostgreSQL com pgvector está rodando e acessível antes de iniciar os microsserviços de ingestão e chatbot.
 
 ### Configurando o WhatsApp (WAHA)
-1. Acesse o painel do WAHA no navegador: `http://localhost:3000/dashboard`
-2. Inicie uma nova sessão (ex: `default`).
-3. Escaneie o QR Code com o WhatsApp que servirá como o número do bot.
-4. **Configuração do Webhook:** No painel do WAHA ou no seu `docker-compose.yml`, certifique-se de que o Webhook está apontando para o microsserviço do Chatbot. Exemplo: `http://host.docker.internal:8002/webhook` (usamos `host.docker.internal` para o container enxergar a sua máquina local, e `8002` será a porta do chatbot).
+
+1. Acesse o painel do WAHA: `http://localhost:3000/dashboard`
+2. Inicie uma nova sessão (ex: `default`)
+3. Escaneie o QR Code com o número que será o bot
+4. O webhook já está configurado no `dockercompose.yml` para apontar para `http://host.docker.internal:8002/webhook`
 
 ---
 
-## 📥 2. Extração dos Manuais (`manualsExtraction`)
+## 2. Extração dos Manuais (`manualsExtraction`)
 
-Este microsserviço raspa o conteúdo HTML das páginas do SUAP, extrai os tópicos e imagens, e devolve um JSON estruturado.
+Faz o download e o parsing inteligente do HTML dos manuais do SUAP, extraindo tópicos, textos e links de imagens.
 
-### Como rodar:
-Abra um terminal, acesse a pasta e instale as dependências:
+Veja o [README do manualsExtraction](./manualsExtraction/README.md) para instruções detalhadas.
+
+**Execução rápida:**
 ```bash
 cd manualsExtraction
-python -m venv venv
-# Windows: venv\Scripts\activate | Linux/Mac: source venv/bin/activate
 pip install -r requirements.txt
-```
-
-Inicie o servidor na **porta 8000**:
-```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-### Como usar:
-Faça uma requisição `POST` para `http://127.0.0.1:8000/api/v1/processar/lote` enviando um JSON com as URLs dos manuais:
-```json
-{
-  "urls": [
-    "https://suap.ifpi.edu.br/documentacao/manual/123/"
-  ]
-}
-```
-*O sistema retornará o conteúdo estruturado e também salvará um arquivo de backup localmente na pasta `output/`.*
-
 ---
 
-## 🧠 3. Ingestão no Banco Vetorial (`manualsIngestion-RAG`)
+## 3. Ingestão Vetorial (`manualsIngestion-RAG`)
 
-Este microsserviço recebe os dados extraídos, converte em vetores (embeddings) usando LangChain e OpenAI, e salva no Qdrant.
+Recebe os dados extraídos, gera embeddings via OpenAI e armazena os vetores no PostgreSQL pgvector.
 
-### Como rodar:
-Abra um novo terminal, acesse a pasta e instale as dependências:
+Veja o [README do manualsIngestion-RAG](./manualsIngestion-RAG/README.md) para instruções detalhadas.
+
+**Execução rápida:**
 ```bash
 cd manualsIngestion-RAG
-python -m venv venv
-# Windows: venv\Scripts\activate | Linux/Mac: source venv/bin/activate
 pip install -r requirements.txt
-```
-
-Crie um arquivo `.env` na raiz desta pasta:
-```env
-OPENAI_API_KEY=sk-sua-chave-aqui
-QDRANT_URL=http://localhost:6333
-QDRANT_COLLECTION=manuais_suap_ifpi
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-```
-
-Inicie o servidor na **porta 8001** (para não conflitar com a Extração):
-```bash
 uvicorn app.main:app --reload --port 8001
 ```
 
-### Como usar:
-Faça uma requisição `POST` para `http://127.0.0.1:8001/api/v1/ingestao/lote`. Você deve enviar no corpo (`body`) exatamente a lista JSON que foi gerada pelo microsserviço de Extração.
-
 ---
 
-## 💬 4. Chatbot do WhatsApp (`chat-bot`)
+## 4. Chatbot RAG (`chat-bot`)
 
-O motor de RAG e integração com os usuários. Ele aguarda as mensagens via webhook, consulta o Qdrant e responde de forma inteligente.
+Webhook que recebe mensagens do WhatsApp via WAHA, faz busca semântica no pgvector e gera respostas com a LLM da OpenAI.
 
-### Como rodar:
-Abra um terceiro terminal, acesse a pasta e instale as dependências:
+Veja o [README do chat-bot](./chat-bot/README.md) para instruções detalhadas.
+
+**Execução rápida:**
 ```bash
 cd chat-bot
-python -m venv venv
-# Windows: venv\Scripts\activate | Linux/Mac: source venv/bin/activate
 pip install -r requirements.txt
-```
-
-Crie um arquivo `.env` na raiz desta pasta:
-```env
-WAHA_URL=http://localhost:3000/api/sendText
-OPENAI_API_KEY=sk-sua-chave-aqui
-QDRANT_URL=http://localhost:6333
-QDRANT_COLLECTION=manuais_suap_ifpi
-```
-
-Inicie o servidor na **porta 8002** (a mesma configurada no Webhook do WAHA):
-```bash
 uvicorn main:app --reload --port 8002
 ```
 
-### Como usar:
-Com os 3 terminais rodando (WAHA no Docker + Qdrant no Docker + `chat-bot` na porta 8002), basta enviar uma mensagem no WhatsApp para o número que você escaneou o QR Code. O WAHA enviará o evento para o webhook, o bot fará a busca no Qdrant, a OpenAI formulará a resposta, e o usuário receberá o texto no celular!
+---
+
+## 5. Gerador de Q&A (`q&a-generator`)
+
+Utilitário para geração de datasets sintéticos de perguntas e respostas usando o Google Gemini, utilizado para avaliar a qualidade do RAG com o framework Ragas.
+
+Veja o [README do q&a-generator](./q&a-generator/README.md) para instruções detalhadas.
+
+---
+
+## Stack Tecnológica
+
+| Camada | Tecnologia |
+|---|---|
+| Framework Web | FastAPI + Uvicorn |
+| LLM | OpenAI GPT (configurável) |
+| Embeddings | OpenAI text-embedding-3-small |
+| Banco Vetorial | PostgreSQL + pgvector |
+| RAG Orchestration | LangChain |
+| WhatsApp Bridge | WAHA (via Docker) |
+| Geração Sintética | Google Gemini |
+| Avaliação RAG | Ragas |
+| HTML Parsing | BeautifulSoup4 + HTTPX |
+| Containerização | Docker / Docker Compose |
+
+---
+
+## Ordem de Inicialização Recomendada
+
+1. `docker compose up -d` — sobe o WAHA
+2. Garanta que o PostgreSQL com pgvector está rodando
+3. `uvicorn app.main:app --reload --port 8000` — inicia a Extração
+4. `uvicorn app.main:app --reload --port 8001` — inicia a Ingestão
+5. Execute o pipeline de ingestão para popular o banco vetorial
+6. `uvicorn main:app --reload --port 8002` — inicia o Chatbot
