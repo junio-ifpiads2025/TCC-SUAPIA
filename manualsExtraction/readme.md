@@ -26,3 +26,5 @@ A aplicação recebe um lote de URLs, descarrega o conteúdo de forma assíncron
 **1. Clone o repositório ou navegue até à pasta do projeto:**
 ```bash
 cd seu_projeto
+
+uvicorn app.main:app --reload --port 8000

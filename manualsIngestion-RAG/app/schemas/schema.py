@@ -14,6 +14,10 @@ class ManualResponse(BaseModel):
 class IngestaoRequest(BaseModel):
     manuais: List[ManualResponse]
 
+class ItemExtracaoManual(BaseModel):
+    nome: str
+    resultados: List[ManualResponse]
+
 class IngestaoResponse(BaseModel):
     mensagem: str
     total_manuais: int

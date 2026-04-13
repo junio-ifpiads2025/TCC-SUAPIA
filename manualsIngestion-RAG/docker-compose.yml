@@ -16,13 +16,5 @@ services:
       # Esta linha mapeia o seu arquivo local para a pasta de inicialização do container
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
-  waha:
-    image: devlikeapro/waha
-    container_name: waha
-    restart: always
-    ports:
-      - "3000:3000"
-    env_file:
-      - .env # Já configurado com o motor mais leve que recomendei
-    volumes:
-      - ./waha_data:/app/.waha
+volumes:
+  pgvector_data:
