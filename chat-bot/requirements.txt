@@ -6,5 +6,6 @@ langchain-openai
 langchain-postgres
 psycopg[binary]
 python-dotenv
+sentence-transformers
 ragas
 datasets
