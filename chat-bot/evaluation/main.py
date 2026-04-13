@@ -11,8 +11,8 @@ from utils.reporter import salvar_relatorio_csv
 def main():
     """Função principal que orquestra o fluxo de avaliação."""
 
-    # 0. Carrega as variáveis de ambiente (API Keys)
-    load_dotenv()
+    # 0. Carrega as variáveis de ambiente (API Keys e configurações)
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
     # 1. Configura os caminhos
     diretorio_atual = os.path.dirname(__file__)
@@ -25,15 +25,29 @@ def main():
         print("❌ Nenhum arquivo de dataset encontrado em 'dataset/'.")
         return
     caminho_qa = arquivos[-1]
-    print(f"📂 Dataset carregado: {os.path.basename(caminho_qa)}")
-    
+    nome_dataset = os.path.basename(caminho_qa)
+    print(f"📂 Dataset carregado: {nome_dataset}")
+
     print("🚀 Iniciando Pipeline de Avaliação do RAG...\n")
-    
-    # 2. Fluxo em formato de cascata (Pipeline)
+
+    # 2. Coleta metadados da configuração para enriquecer o relatório
+    metadata = {
+        "dataset_arquivo":            nome_dataset,
+        "modelo_llm_rag":             os.getenv("MODELO_LLM", "N/A"),
+        "modelo_embedding_rag":       os.getenv("MODELO_EMBEDDING", "N/A"),
+        "temperature":                os.getenv("TEMPERATURE", "N/A"),
+        "system_prompt":              os.getenv("SYSTEM_PROMPT", "N/A"),
+    }
+
+    # 3. Fluxo em formato de cascata (Pipeline)
     qa_dados = carregar_dados_qa(caminho_qa)
     dados_formatados = gerar_dados_para_avaliacao(qa_dados)
-    resultados = executar_metricas_ragas(dados_formatados)
-    salvar_relatorio_csv(resultados, pasta_resultados)
+    resultados, info_modelos = executar_metricas_ragas(dados_formatados)
+
+    # Incorpora os modelos do avaliador nos metadados
+    metadata.update(info_modelos)
+
+    salvar_relatorio_csv(resultados, pasta_resultados, metadata=metadata)
 
 if __name__ == "__main__":
     main()
