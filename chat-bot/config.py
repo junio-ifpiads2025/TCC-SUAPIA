@@ -7,8 +7,11 @@ load_dotenv()
 
 WAHA_URL = os.getenv("WAHA_URL", "http://localhost:3000/api/sendText")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "sua-chave-openai")
-QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "minha_base_de_conhecimento")
+PGVECTOR_CONNECTION_STRING = os.getenv(
+    "PGVECTOR_CONNECTION_STRING",
+    "postgresql+psycopg://admin:adminpassword@localhost:5432/vetordatabase"
+)
+PGVECTOR_COLLECTION = os.getenv("PGVECTOR_COLLECTION", "manuais_suap_ifpi")
 
 # --- CONTROLE DE ACESSO ---
 # Converte a string "True" ou "False" do .env para um booleano real do Python

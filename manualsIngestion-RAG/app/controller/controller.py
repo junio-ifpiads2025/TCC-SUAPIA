@@ -12,7 +12,7 @@ async def controller_ingestao(payload: IngestaoRequest) -> IngestaoResponse:
         total_chunks = await run_in_threadpool(processar_vetorizacao, payload.manuais)
         
         return IngestaoResponse(
-            mensagem="Ingestão para o Qdrant concluída com sucesso!",
+            mensagem="Ingestão para o pgvector concluída com sucesso!",
             total_manuais=len(payload.manuais),
             total_blocos_gerados=total_chunks
         )

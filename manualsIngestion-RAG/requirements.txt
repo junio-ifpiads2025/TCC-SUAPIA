@@ -1,7 +1,7 @@
 langchain
 langchain-openai
-langchain-qdrant
+langchain-postgres
 langchain-text-splitters
-qdrant-client
+psycopg[binary]
 python-dotenv
 ipykernel
