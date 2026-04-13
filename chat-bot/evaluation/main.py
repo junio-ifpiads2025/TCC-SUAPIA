@@ -1,4 +1,5 @@
 import os
+import glob
 from dotenv import load_dotenv
 
 # Importando os nossos próprios módulos
@@ -9,14 +10,22 @@ from utils.reporter import salvar_relatorio_csv
 
 def main():
     """Função principal que orquestra o fluxo de avaliação."""
-    
+
     # 0. Carrega as variáveis de ambiente (API Keys)
     load_dotenv()
-    
+
     # 1. Configura os caminhos
     diretorio_atual = os.path.dirname(__file__)
-    caminho_qa = os.path.join(diretorio_atual, 'dataset', 'questions_qa.json')
+    pasta_dataset = os.path.join(diretorio_atual, 'dataset')
     pasta_resultados = os.path.join(diretorio_atual, 'results')
+
+    # Pega o dataset mais recente da pasta automaticamente
+    arquivos = sorted(glob.glob(os.path.join(pasta_dataset, '*.json')))
+    if not arquivos:
+        print("❌ Nenhum arquivo de dataset encontrado em 'dataset/'.")
+        return
+    caminho_qa = arquivos[-1]
+    print(f"📂 Dataset carregado: {os.path.basename(caminho_qa)}")
     
     print("🚀 Iniciando Pipeline de Avaliação do RAG...\n")
     

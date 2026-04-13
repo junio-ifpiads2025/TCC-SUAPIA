@@ -46,8 +46,8 @@ def gerar_dados_para_avaliacao(qa_dados: list) -> dict:
     print(f"⏳ Processando {len(qa_dados)} perguntas no banco vetorial...\n")
     
     for i, item in enumerate(qa_dados, 1):
-        pergunta = item["pergunta"]
-        ground_truth = item["resposta_esperada"]
+        pergunta = item["user_input"]
+        ground_truth = item["reference"]
         
         print(f"[{i}/{len(qa_dados)}] Coletando dados para: {pergunta}")
         

@@ -106,26 +106,17 @@ def main():
     pasta_saida = BASE_DIR / "dataset"
     pasta_saida.mkdir(exist_ok=True)
 
-    qtd_links = len(tarefas)
-    cotas = [
-        meta_global // qtd_links + (1 if i < meta_global % qtd_links else 0)
-        for i in range(qtd_links)
-    ]
-
-    print(f"Meta global: {meta_global} perguntas distribuídas em {qtd_links} manual(is).")
+    print(f"Meta por livro: {meta_global} perguntas | Total de livros: {len(tarefas)}")
     print(f"Modelo configurado: {modelo_gemini}\n")
 
-    for i, tarefa in enumerate(tarefas):
-        cota = cotas[i]
+    dataset_global: list[dict] = []
+
+    for tarefa in tarefas:
+        cota = meta_global
         nome_livro = tarefa['livro']
 
         print(f"--- Processando: {nome_livro} | Cota: {cota} pergunta(s) ---")
 
-        if cota == 0:
-            print(" -> Cota zero para este manual. Pulando.")
-            continue
-
-        dataset_manual: list[dict] = []
         partes_texto = []
         for url in tarefa['urls']:
             partes_texto.append(extrair_texto_da_url(url))
@@ -143,19 +134,20 @@ def main():
                 time.sleep(DELAY_ENTRE_CHAMADAS)
 
             gerados = gerar_perguntas_com_ia(chunk, tarefa['persona'], faltam)
-            dataset_manual.extend(gerados)
+            dataset_global.extend(gerados)
             faltam -= len(gerados)
             print(f" -> Geradas: {len(gerados)} | Faltam: {max(0, faltam)}")
 
-        if dataset_manual:
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            nome_arquivo = nome_livro.replace(" ", "_").lower()
-            caminho = pasta_saida / f"{nome_arquivo}_{timestamp}.json"
+        print()
 
-            with open(caminho, 'w', encoding='utf-8') as f:
-                json.dump(dataset_manual, f, ensure_ascii=False, indent=4)
+    if dataset_global:
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        caminho = pasta_saida / f"dataset_{timestamp}.json"
 
-            print(f"✅ Arquivo salvo: {caminho}\n")
+        with open(caminho, 'w', encoding='utf-8') as f:
+            json.dump(dataset_global, f, ensure_ascii=False, indent=4)
+
+        print(f"✅ Dataset completo salvo: {caminho} ({len(dataset_global)} perguntas)\n")
 
 
 if __name__ == "__main__":
