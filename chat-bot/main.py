@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from services import logger
+
 # ---------------------------------------------------------------------------
 # Seleção do pipeline via variável de ambiente
 # USE_ADVANCED_RAG=true  → Advanced RAG (reescrita + multi-query + reranking)
@@ -13,10 +15,10 @@ _use_advanced = os.getenv("USE_ADVANCED_RAG", "false").lower() in ("true", "1", 
 
 if _use_advanced:
     from services.advanced_rag_agent import gerar_resposta_avancada as gerar_resposta
-    print("[main] Modo: Advanced RAG Pipeline")
+    logger.success("BOOT", "Modo: Advanced RAG Pipeline")
 else:
     from services.rag_agent import gerar_resposta
-    print("[main] Modo: RAG Simples")
+    logger.success("BOOT", "Modo: RAG Simples")
 
 from services.waha_client import enviar_mensagem_waha, enviar_imagem_waha
 from config import RESPONDER_QUALQUER_NUMERO, NUMEROS_PERMITIDOS
@@ -27,10 +29,13 @@ app = FastAPI(title="WhatsApp RAG Bot")
 def processar_fluxo_mensagem(chat_id: str, pergunta: str):
     """Orquestra geração de resposta e envio (texto + imagens) em background."""
 
+    logger.incoming(chat_id, pergunta)
+
     # 1. Gera a resposta com IA e recupera os metadados do banco vetorial
     resposta_ia, lista_metadata = gerar_resposta(pergunta)
 
-    # 2. Envia o texto principal primeiro (resposta rápida ao usuário)
+    # 2. Envia o texto principal
+    logger.response_log(resposta_ia)
     enviar_mensagem_waha(chat_id, resposta_ia)
 
     # 3. Coleta links de imagens únicos presentes nos chunks recuperados
@@ -42,7 +47,7 @@ def processar_fluxo_mensagem(chat_id: str, pergunta: str):
 
     # 4. Envia cada imagem como mensagem separada
     if links_imagens_unicos:
-        print(f"[main] Enviando {len(links_imagens_unicos)} imagem(ns) do contexto...")
+        logger.info("IMAGENS", f"Enviando {len(links_imagens_unicos)} imagem(ns) do contexto...")
         for link_url in links_imagens_unicos:
             enviar_imagem_waha(chat_id, link_url)
 
@@ -63,6 +68,6 @@ async def waha_webhook(request: Request, background_tasks: BackgroundTasks):
         if RESPONDER_QUALQUER_NUMERO or chat_id in NUMEROS_PERMITIDOS:
             background_tasks.add_task(processar_fluxo_mensagem, chat_id, body)
         else:
-            print(f"[main] Mensagem ignorada. Número sem permissão: {chat_id}")
+            logger.warn("WEBHOOK", f"Mensagem ignorada — número sem permissão: {chat_id}")
 
     return {"status": "ok"}

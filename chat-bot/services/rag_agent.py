@@ -3,6 +3,7 @@ from openai import OpenAI
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 from dotenv import load_dotenv
+from services import logger
 
 load_dotenv()
 
@@ -37,6 +38,7 @@ def recuperar_contexto_e_metadata(pergunta: str):
     """Busca o contexto relevante no pgvector e retorna texto e metadados."""
     try:
         docs = vector_store.similarity_search(pergunta, k=3)
+        logger.info("RETRIEVAL", f"{len(docs)} chunk(s) recuperado(s) do pgvector")
 
         textos_recuperados = [doc.page_content for doc in docs]
         contexto_final = "\n\n".join(textos_recuperados)
@@ -45,7 +47,7 @@ def recuperar_contexto_e_metadata(pergunta: str):
 
         return contexto_final, metadados_recuperados
     except Exception as e:
-        print(f"Erro no pgvector: {e}")
+        logger.error("RETRIEVAL", f"Erro no pgvector: {e}")
         return "", []
 
 def gerar_resposta(pergunta: str):
@@ -55,32 +57,32 @@ def gerar_resposta(pergunta: str):
     contexto, metadados = recuperar_contexto_e_metadata(pergunta)
     
     if not contexto:
+        logger.warn("RAG", "Nenhum contexto encontrado nos manuais.")
         return "Desculpe, não encontrei informações sobre isso nos manuais.", []
-        
-    # 2. Prepara o prompt (User)
-    # O System Prompt agora vem diretamente da variável global SYSTEM_PROMPT configurada no .env
-    prompt_contexto = f"""CONTEXTO RECUPERADO DOS MANUAIS:
------------------------------------
-{contexto}
------------------------------------
-PERGUNTA DO USUÁRIO: {pergunta}"""
+
+    prompt_contexto = (
+        "CONTEXTO RECUPERADO DOS MANUAIS:\n"
+        "-----------------------------------\n"
+        f"{contexto}\n"
+        "-----------------------------------\n"
+        f"PERGUNTA DO USUÁRIO: {pergunta}"
+    )
 
     try:
-        # 3. Chama a OpenAI para gerar o texto
+        logger.info("LLM", f"Chamando modelo {MODELO_LLM}…")
         res_openai = openai_client.chat.completions.create(
-            model=MODELO_LLM, # Usa o modelo do .env
+            model=MODELO_LLM,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT}, # Usa o prompt do .env
-                {"role": "user", "content": prompt_contexto}
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt_contexto},
             ],
-            temperature=TEMPERATURE # Usa a temperatura do .env
+            temperature=TEMPERATURE,
         )
-        
+
         resposta_final_texto = res_openai.choices[0].message.content
-        
-        # 4. Retorna a resposta de texto e os metadados
+        logger.success("LLM", "Resposta gerada com sucesso.")
         return resposta_final_texto, metadados
-        
+
     except Exception as e:
-        print(f"Erro na OpenAI: {e}")
+        logger.error("LLM", f"Erro na OpenAI: {e}")
         return "Desculpe, tive um erro ao processar sua pergunta.", []

@@ -13,6 +13,8 @@ from sentence_transformers import CrossEncoder
 
 load_dotenv()
 
+from services import logger
+
 # ---------------------------------------------------------------------------
 # Configuração via variáveis de ambiente
 # ---------------------------------------------------------------------------
@@ -125,7 +127,7 @@ class MultiviewRetriever:
         try:
             return self._store.similarity_search(query, k=self._top_k)
         except Exception as e:
-            print(f"[Retriever] Erro na busca para '{query[:50]}': {e}")
+            logger.error("RETRIEVER", f"Erro na busca para '{query[:50]}': {e}")
             return []
 
     def retrieve(self, queries: List[str]) -> List[Document]:
@@ -162,13 +164,11 @@ class ContextReranker:
 
     def _load_reranker(self) -> None:
         try:
-           
-
-            print(f"[Reranker] Carregando modelo: {self._model_name}")
+            logger.info("RERANKER", f"Carregando modelo: {self._model_name}")
             self._reranker = CrossEncoder(self._model_name, max_length=512)
-            print("[Reranker] Modelo carregado com sucesso.")
+            logger.success("RERANKER", "Modelo carregado com sucesso.")
         except Exception as e:
-            print(f"[Reranker] Falha ao carregar o modelo ({e}). Reranking desabilitado.")
+            logger.error("RERANKER", f"Falha ao carregar o modelo ({e}). Reranking desabilitado.")
             self._reranker = None
 
     def rerank(self, query: str, docs: List[Document]) -> List[Document]:
@@ -176,8 +176,7 @@ class ContextReranker:
             return docs
 
         if self._reranker is None:
-            # Fallback: retorna os primeiros top_k sem reranking
-            print("[Reranker] Usando fallback (sem reranking).")
+            logger.warn("RERANKER", "Usando fallback (sem reranking).")
             return docs[: self._top_k]
 
         pairs = [[query, doc.page_content] for doc in docs]
@@ -246,29 +245,34 @@ class AdvancedRAGPipeline:
             resposta (str): texto gerado pelo LLM.
             metadados (List[dict]): metadados dos chunks usados no contexto.
         """
-        print(f"\n[Advanced RAG] Query original: {user_query}")
-
         # Fase 1 — Transformação
+        logger.phase(1, "Transformação da Consulta")
+        logger.info("QUERY", f"Original: {user_query}")
         rewritten_query, all_queries = self.transformer.transform(user_query)
-        print(f"[Advanced RAG] Query reescrita: {rewritten_query}")
-        print(f"[Advanced RAG] Total de queries (1 + {len(all_queries) - 1} variações): {len(all_queries)}")
+        logger.info("QUERY", f"Reescrita: {rewritten_query}")
+        logger.info("QUERY", f"{len(all_queries)} queries no total (1 reescrita + {len(all_queries) - 1} variações)")
 
         # Fase 2 — Retrieval
+        logger.phase(2, "Busca Vetorial Multi-Query")
         candidate_docs = self.retriever.retrieve(all_queries)
-        print(f"[Advanced RAG] Documentos únicos recuperados: {len(candidate_docs)}")
+        logger.info("RETRIEVER", f"{len(candidate_docs)} documento(s) único(s) recuperado(s)")
 
         if not candidate_docs:
+            logger.warn("RETRIEVER", "Nenhum documento encontrado nos manuais.")
             return "Desculpe, não encontrei informações sobre isso nos manuais.", []
 
         # Fase 3 — Reranking
+        logger.phase(3, "Re-ranqueamento (Cross-Encoder)")
         top_docs = self.reranker.rerank(rewritten_query, candidate_docs)
-        print(f"[Advanced RAG] Documentos após reranking (Top-{RERANKER_TOP_K}): {len(top_docs)}")
+        logger.success("RERANKER", f"Top-{RERANKER_TOP_K} documentos selecionados após reranking")
 
         # Fase 4 — Geração
+        logger.phase(4, "Geração da Resposta")
+        logger.info("LLM", f"Chamando modelo {MODELO_LLM_AVANCADO}…")
         try:
             answer = self.generator.generate(rewritten_query, top_docs)
         except Exception as e:
-            print(f"[Advanced RAG] Erro na geração: {e}")
+            logger.error("LLM", f"Erro na geração: {e}")
             return "Desculpe, tive um erro ao processar sua pergunta.", []
 
         metadata = [doc.metadata for doc in top_docs]

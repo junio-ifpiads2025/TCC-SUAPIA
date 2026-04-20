@@ -58,7 +58,7 @@ pip install -r requirements.txt
 cp .env.example .env  # edite o arquivo .env com suas credenciais
 
 # Inicie o servidor
-uvicorn main:app --reload --port 8002
+uvicorn main:app --host 0.0.0.0 --port 8002 --reload
 ```
 
 ---

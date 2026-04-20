@@ -2,6 +2,7 @@ import os
 import requests
 import time
 from dotenv import load_dotenv
+from services import logger
 
 load_dotenv()
 
@@ -19,9 +20,10 @@ def enviar_mensagem_waha(chat_id: str, texto: str):
     }
     try:
         response = requests.post(url, json=payload)
+        logger.success("WAHA", f"Texto enviado para {chat_id}")
         return response.json()
     except Exception as e:
-        print(f"Erro ao enviar texto via WAHA: {e}")
+        logger.error("WAHA", f"Erro ao enviar texto: {e}")
         return None
 
 def enviar_imagem_waha(chat_id: str, image_url: str):
@@ -39,14 +41,10 @@ def enviar_imagem_waha(chat_id: str, image_url: str):
     }
     
     try:
-        print(f"🖼️ Enviando imagem para {chat_id}: {image_url}")
+        logger.image_log(chat_id, image_url)
         response = requests.post(url, json=payload)
-        
-        # Adiciona um pequeno delay de 1 segundo para o WhatsApp não travar
-        # enviando muitas imagens de uma vez só.
-        time.sleep(1) 
-        
+        time.sleep(1)
         return response.json()
     except Exception as e:
-        print(f"Erro ao enviar imagem via WAHA: {e}")
+        logger.error("WAHA", f"Erro ao enviar imagem: {e}")
         return None
