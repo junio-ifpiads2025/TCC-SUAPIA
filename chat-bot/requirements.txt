@@ -7,5 +7,6 @@ langchain-postgres
 psycopg[binary]
 python-dotenv
 sentence-transformers
+cohere
 ragas
 datasets

@@ -9,7 +9,7 @@ from langchain_postgres import PGVector
 from langchain_core.documents import Document
 from dotenv import load_dotenv
 
-from sentence_transformers import CrossEncoder
+import cohere
 
 load_dotenv()
 
@@ -27,7 +27,8 @@ PGVECTOR_COLLECTION = os.getenv("PGVECTOR_COLLECTION", "manuais_suap_ifpi")
 MODELO_LLM_RAPIDO = os.getenv("MODELO_LLM_RAPIDO", "gpt-4o-mini")
 MODELO_LLM_AVANCADO = os.getenv("MODELO_LLM_AVANCADO", "gpt-4o")
 MODELO_EMBEDDING = os.getenv("MODELO_EMBEDDING", "text-embedding-3-small")
-RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+COHERE_API_KEY = os.getenv("COHERE_API_KEY", "")
+RERANKER_MODEL = os.getenv("RERANKER_MODEL", "rerank-multilingual-v3.0")
 RETRIEVAL_TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "5"))
 RERANKER_TOP_K = int(os.getenv("RERANKER_TOP_K", "3"))
 MULTI_QUERY_COUNT = int(os.getenv("MULTI_QUERY_COUNT", "3"))
@@ -172,37 +173,43 @@ class MultiviewRetriever:
 # Fase 3 — Re-ranqueamento (Reranking)
 # ---------------------------------------------------------------------------
 class ContextReranker:
-    """Aplica Cross-Encoder para reordenar os documentos por relevância."""
+    """Usa a API de Rerank da Cohere para reordenar documentos por relevância."""
 
     def __init__(self, model_name: str, top_k: int):
         self._top_k = top_k
         self._model_name = model_name
-        self._reranker = None
+        self._client: cohere.ClientV2 | None = None
         self._load_reranker()
 
     def _load_reranker(self) -> None:
+        if not COHERE_API_KEY:
+            logger.error("RERANKER", "COHERE_API_KEY não definida. Reranking desabilitado.")
+            return
         try:
-            logger.info("RERANKER", f"Carregando modelo: {self._model_name}")
-            self._reranker = CrossEncoder(self._model_name, max_length=512)
-            logger.success("RERANKER", "Modelo carregado com sucesso.")
+            logger.info("RERANKER", f"Inicializando Cohere Rerank: {self._model_name}")
+            self._client = cohere.ClientV2(api_key=COHERE_API_KEY)
+            logger.success("RERANKER", "Cliente Cohere inicializado.")
         except Exception as e:
-            logger.error("RERANKER", f"Falha ao carregar o modelo ({e}). Reranking desabilitado.")
-            self._reranker = None
+            logger.error("RERANKER", f"Falha ao inicializar Cohere ({e}). Reranking desabilitado.")
+            self._client = None
 
     def rerank(self, query: str, docs: List[Document]) -> Tuple[List[Document], float]:
-        """Retorna (top_docs, max_score). max_score é o maior score bruto do Cross-Encoder."""
+        """Retorna (top_docs, max_score). max_score é o maior relevance_score da Cohere."""
         if not docs:
             return docs, 0.0
 
-        if self._reranker is None:
+        if self._client is None:
             logger.warn("RERANKER", "Usando fallback (sem reranking).")
             return docs[: self._top_k], 1.0
 
-        pairs = [[query, doc.page_content] for doc in docs]
-        scores = self._reranker.predict(pairs)
-        max_score = float(max(scores))
-        ranked = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)
-        top_docs = [doc for _, doc in ranked[: self._top_k]]
+        response = self._client.rerank(
+            model=self._model_name,
+            query=query,
+            documents=[doc.page_content for doc in docs],
+            top_n=self._top_k,
+        )
+        top_docs = [docs[r.index] for r in response.results]
+        max_score = float(response.results[0].relevance_score) if response.results else 0.0
         return top_docs, max_score
 
 
