@@ -65,3 +65,13 @@ def response_log(text: str, max_len: int = 300) -> None:
 
 def image_log(chat_id: str, url: str) -> None:
     print(f"{_tag('IMAGEM', BLUE)} → {CYAN}{chat_id}{R}  {DIM}{url}{R}")
+
+
+def log_chunks(docs, max_preview: int = 120) -> None:
+    for i, doc in enumerate(docs, 1):
+        source = doc.metadata.get("source", doc.metadata.get("file_name", "desconhecido"))
+        preview = doc.page_content[:max_preview].replace("\n", " ")
+        if len(doc.page_content) > max_preview:
+            preview += "…"
+        print(f"  {DIM}[{i}]{R} {CYAN}{source}{R}")
+        print(f"      {DIM}{preview}{R}")

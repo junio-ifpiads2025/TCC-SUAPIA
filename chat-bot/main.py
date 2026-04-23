@@ -8,12 +8,17 @@ from services import logger
 
 # ---------------------------------------------------------------------------
 # Seleção do pipeline via variável de ambiente
+# USE_CRAG=true          → CRAG Pipeline (relevância condicional + fallback)
 # USE_ADVANCED_RAG=true  → Advanced RAG (reescrita + multi-query + reranking)
 # USE_ADVANCED_RAG=false → RAG simples (comportamento original)
 # ---------------------------------------------------------------------------
+_use_crag = os.getenv("USE_CRAG", "false").lower() in ("true", "1", "t")
 _use_advanced = os.getenv("USE_ADVANCED_RAG", "false").lower() in ("true", "1", "t")
 
-if _use_advanced:
+if _use_crag:
+    from services.advanced_rag_agent import gerar_resposta_crag as gerar_resposta
+    logger.success("BOOT", "Modo: CRAG Pipeline")
+elif _use_advanced:
     from services.advanced_rag_agent import gerar_resposta_avancada as gerar_resposta
     logger.success("BOOT", "Modo: Advanced RAG Pipeline")
 else:

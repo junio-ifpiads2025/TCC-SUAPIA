@@ -48,6 +48,13 @@ def processar_vetorizacao(manuais: List[ManualResponse]) -> int:
     )
     blocos = text_splitter.split_documents(documentos)
 
+    for bloco in blocos:
+        bloco.page_content = (
+            f"Manual: {bloco.metadata['manual']}\n"
+            f"Tópico: {bloco.metadata['topico']}\n"
+            f"Conteúdo: {bloco.page_content}"
+        )
+
     embeddings = OpenAIEmbeddings(model=MODELO_EMBEDDING)
 
     PGVector.from_documents(

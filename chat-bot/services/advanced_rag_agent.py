@@ -32,6 +32,11 @@ RETRIEVAL_TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "5"))
 RERANKER_TOP_K = int(os.getenv("RERANKER_TOP_K", "3"))
 MULTI_QUERY_COUNT = int(os.getenv("MULTI_QUERY_COUNT", "3"))
 TEMPERATURE_AVANCADO = float(os.getenv("TEMPERATURE", "0.1"))
+CRAG_SCORE_THRESHOLD = float(os.getenv("CRAG_SCORE_THRESHOLD", "0.7"))
+FALLBACK_MESSAGE = os.getenv(
+    "FALLBACK_MESSAGE",
+    "Desculpe, não encontrei informações suficientemente relevantes sobre isso nos manuais do SUAP.",
+)
 SYSTEM_PROMPT = os.getenv(
     "SYSTEM_PROMPT",
     (
@@ -138,6 +143,19 @@ class MultiviewRetriever:
                 all_docs.extend(docs)
         return self._deduplicate(all_docs)
 
+    def retrieve_with_details(
+        self, queries: List[str]
+    ) -> Tuple[List[Document], List[Tuple[str, int]]]:
+        """Como retrieve(), mas também retorna contagem de docs por query."""
+        with ThreadPoolExecutor(max_workers=len(queries)) as executor:
+            results = list(executor.map(self._search_one, queries))
+        all_docs: List[Document] = []
+        per_query: List[Tuple[str, int]] = []
+        for query, docs in zip(queries, results):
+            per_query.append((query, len(docs)))
+            all_docs.extend(docs)
+        return self._deduplicate(all_docs), per_query
+
     @staticmethod
     def _deduplicate(docs: List[Document]) -> List[Document]:
         seen: set = set()
@@ -171,18 +189,21 @@ class ContextReranker:
             logger.error("RERANKER", f"Falha ao carregar o modelo ({e}). Reranking desabilitado.")
             self._reranker = None
 
-    def rerank(self, query: str, docs: List[Document]) -> List[Document]:
+    def rerank(self, query: str, docs: List[Document]) -> Tuple[List[Document], float]:
+        """Retorna (top_docs, max_score). max_score é o maior score bruto do Cross-Encoder."""
         if not docs:
-            return docs
+            return docs, 0.0
 
         if self._reranker is None:
             logger.warn("RERANKER", "Usando fallback (sem reranking).")
-            return docs[: self._top_k]
+            return docs[: self._top_k], 1.0
 
         pairs = [[query, doc.page_content] for doc in docs]
         scores = self._reranker.predict(pairs)
+        max_score = float(max(scores))
         ranked = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)
-        return [doc for _, doc in ranked[: self._top_k]]
+        top_docs = [doc for _, doc in ranked[: self._top_k]]
+        return top_docs, max_score
 
 
 # ---------------------------------------------------------------------------
@@ -259,11 +280,11 @@ class AdvancedRAGPipeline:
 
         if not candidate_docs:
             logger.warn("RETRIEVER", "Nenhum documento encontrado nos manuais.")
-            return "Desculpe, não encontrei informações sobre isso nos manuais.", []
+            return "Desculpe, não encontrei informações sobre isso nos manuais.", "", []
 
         # Fase 3 — Reranking
         logger.phase(3, "Re-ranqueamento (Cross-Encoder)")
-        top_docs = self.reranker.rerank(rewritten_query, candidate_docs)
+        top_docs, _ = self.reranker.rerank(rewritten_query, candidate_docs)
         logger.success("RERANKER", f"Top-{RERANKER_TOP_K} documentos selecionados após reranking")
 
         # Fase 4 — Geração
@@ -273,10 +294,11 @@ class AdvancedRAGPipeline:
             answer = self.generator.generate(rewritten_query, top_docs)
         except Exception as e:
             logger.error("LLM", f"Erro na geração: {e}")
-            return "Desculpe, tive um erro ao processar sua pergunta.", []
+            return "Desculpe, tive um erro ao processar sua pergunta.", "", []
 
+        context_str = "\n\n".join(doc.page_content for doc in top_docs)
         metadata = [doc.metadata for doc in top_docs]
-        return answer, metadata
+        return answer, context_str, metadata
 
 
 # ---------------------------------------------------------------------------
@@ -290,4 +312,124 @@ def gerar_resposta_avancada(pergunta: str) -> Tuple[str, List[dict]]:
     global _pipeline
     if _pipeline is None:
         _pipeline = AdvancedRAGPipeline()
-    return _pipeline.invoke(pergunta)
+    answer, _, metadata = _pipeline.invoke(pergunta)
+    return answer, metadata
+
+
+def get_pipeline_avancado() -> AdvancedRAGPipeline:
+    """Retorna (ou inicializa) a instância global do pipeline avançado."""
+    global _pipeline
+    if _pipeline is None:
+        _pipeline = AdvancedRAGPipeline()
+    return _pipeline
+
+
+# ---------------------------------------------------------------------------
+# Orquestrador — CRAG Pipeline (Corrective RAG)
+# ---------------------------------------------------------------------------
+class CRAGPipeline:
+    """
+    Pipeline CRAG (Corrective RAG):
+      Fase 1  → Reescrita da query
+      Fase 2A → Retrieval inicial (Top-K)
+      Fase 2B → BGE-Reranker avalia relevância (threshold)
+      Fase 3  → [Condicional] Multi-Query Expansion + Retrieval Paralelo + Dedup + Rerank
+      Fase 4  → Geração ou Fallback
+    """
+
+    def __init__(self):
+        self.transformer = QueryTransformer(_openai_client, MODELO_LLM_RAPIDO)
+        self.retriever = MultiviewRetriever(_vector_store, RETRIEVAL_TOP_K)
+        self.reranker = ContextReranker(RERANKER_MODEL, RERANKER_TOP_K)
+        self.generator = AnswerGenerator(
+            _openai_client, MODELO_LLM_AVANCADO, SYSTEM_PROMPT, TEMPERATURE_AVANCADO
+        )
+
+    def invoke(self, user_query: str) -> Tuple[str, List[dict]]:
+        # ── Fase 1: Reescrita ──────────────────────────────────────────────
+        logger.phase(1, "Reescrita da Consulta (Query Rewriting)")
+        logger.info("QUERY", f"Original: {user_query}")
+        rewritten = self.transformer.rewrite(user_query)
+        logger.info("QUERY", f"Reescrita: {rewritten}")
+
+        # ── Fase 2A: Retrieval Inicial ─────────────────────────────────────
+        logger.phase(2, "Retrieval Inicial")
+        initial_docs = self.retriever.retrieve([rewritten])
+        logger.info("RETRIEVER", f"{len(initial_docs)} doc(s) recuperado(s)")
+        logger.log_chunks(initial_docs)
+
+        if not initial_docs:
+            logger.warn("RETRIEVER", "Nenhum documento encontrado. Retornando fallback.")
+            return FALLBACK_MESSAGE, "", []
+
+        # ── Fase 2B: Avaliação de Relevância ──────────────────────────────
+        logger.phase(2, "Avaliação de Relevância (BGE-Reranker)")
+        top_docs, max_score = self.reranker.rerank(rewritten, initial_docs)
+        logger.info("RERANKER", f"max_score={max_score:.4f} | threshold={CRAG_SCORE_THRESHOLD}")
+
+        if max_score >= CRAG_SCORE_THRESHOLD:
+            logger.success("CRAG", f"Score ≥ {CRAG_SCORE_THRESHOLD}: caminho direto para geração.")
+            final_docs = top_docs
+        else:
+            # ── Fase 3: Correção via Multi-Query Expansion ─────────────────
+            logger.warn("CRAG", f"Score < {CRAG_SCORE_THRESHOLD}: acionando Multi-Query Expansion.")
+            logger.phase(3, "Multi-Query Expansion + Retrieval Paralelo")
+
+            variations = self.transformer.expand(rewritten)
+            logger.info("QUERY", f"{len(variations)} variação(ões) gerada(s):")
+            for i, v in enumerate(variations, 1):
+                logger.info("QUERY", f"  [{i}] {v}")
+
+            expanded_docs, per_query = self.retriever.retrieve_with_details(variations)
+
+            logger.info("RETRIEVER", f"{len(expanded_docs)} doc(s) únicos após expansão e deduplicação")
+            for query, count in per_query:
+                short = (query[:57] + "…") if len(query) > 60 else query
+                logger.info("RETRIEVER", f'  → "{short}" → {count} doc(s)')
+            logger.log_chunks(expanded_docs)
+
+            if not expanded_docs:
+                logger.warn("RETRIEVER", "Expansão não retornou documentos. Retornando fallback.")
+                return FALLBACK_MESSAGE, "", []
+
+            top_docs_expanded, max_score_expanded = self.reranker.rerank(rewritten, expanded_docs)
+            logger.info("RERANKER", f"max_score pós-expansão={max_score_expanded:.4f}")
+
+            logger.info("CRAG", "Reranker usado para ordenação. Delegando julgamento de relevância ao LLM.")
+            final_docs = top_docs_expanded
+
+        # ── Fase 4: Geração ────────────────────────────────────────────────
+        logger.phase(4, "Geração da Resposta")
+        logger.info("LLM", f"Chamando {MODELO_LLM_AVANCADO}…")
+        try:
+            answer = self.generator.generate(rewritten, final_docs)
+        except Exception as e:
+            logger.error("LLM", f"Erro na geração: {e}")
+            return "Desculpe, tive um erro ao processar sua pergunta.", "", []
+
+        context_str = "\n\n".join(doc.page_content for doc in final_docs)
+        metadata = [doc.metadata for doc in final_docs]
+        return answer, context_str, metadata
+
+
+# ---------------------------------------------------------------------------
+# Instância global CRAG (lazy — criada na primeira chamada)
+# ---------------------------------------------------------------------------
+_crag_pipeline: CRAGPipeline | None = None
+
+
+def gerar_resposta_crag(pergunta: str) -> Tuple[str, List[dict]]:
+    """Ponto de entrada para o pipeline CRAG."""
+    global _crag_pipeline
+    if _crag_pipeline is None:
+        _crag_pipeline = CRAGPipeline()
+    answer, _, metadata = _crag_pipeline.invoke(pergunta)
+    return answer, metadata
+
+
+def get_pipeline_crag() -> CRAGPipeline:
+    """Retorna (ou inicializa) a instância global do pipeline CRAG."""
+    global _crag_pipeline
+    if _crag_pipeline is None:
+        _crag_pipeline = CRAGPipeline()
+    return _crag_pipeline

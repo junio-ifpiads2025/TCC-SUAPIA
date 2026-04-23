@@ -9,7 +9,7 @@ from ragas.metrics import (
 )
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
-MODELO_AVALIADOR_LLM       = os.getenv("MODELO_AVALIADOR_LLM", "gpt-3.5-turbo")
+MODELO_AVALIADOR_LLM       = os.getenv("MODELO_AVALIADOR_LLM", "gpt-4o-mini")
 MODELO_AVALIADOR_EMBEDDING = os.getenv("MODELO_AVALIADOR_EMBEDDING", "text-embedding-3-small")
 
 def executar_metricas_ragas(dados_formatados: dict):

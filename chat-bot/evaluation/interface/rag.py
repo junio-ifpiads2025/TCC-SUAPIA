@@ -7,23 +7,32 @@ from typing import List
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 # Seleção do pipeline de acordo com a variável de ambiente
+_use_crag = os.getenv("USE_CRAG", "false").lower() in ("true", "1", "t")
 _use_advanced = os.getenv("USE_ADVANCED_RAG", "false").lower() in ("true", "1", "t")
 
-if _use_advanced:
-    from services.advanced_rag_agent import gerar_resposta_avancada as gerar_resposta
-    from services.advanced_rag_agent import AdvancedRAGPipeline
+if _use_crag:
+    from services.advanced_rag_agent import gerar_resposta_crag as gerar_resposta
+    from services.advanced_rag_agent import get_pipeline_crag
 
-    def recuperar_contexto_e_metadata(pergunta: str):
-        """Recupera contexto via pipeline avançado (reescrita + multi-query + reranking)."""
-        pipeline = AdvancedRAGPipeline()
-        _, rewritten_queries = pipeline.transformer.transform(pergunta)
-        docs = pipeline.retriever.retrieve(rewritten_queries)
-        top_docs = pipeline.reranker.rerank(rewritten_queries[0], docs)
-        contexto = "\n\n".join(doc.page_content for doc in top_docs)
-        metadados = [doc.metadata for doc in top_docs]
-        return contexto, metadados
+    def _executar_com_contexto(pergunta: str):
+        """Executa o pipeline CRAG uma única vez e retorna (answer, context, metadata)."""
+        return get_pipeline_crag().invoke(pergunta)
+
+elif _use_advanced:
+    from services.advanced_rag_agent import gerar_resposta_avancada as gerar_resposta
+    from services.advanced_rag_agent import get_pipeline_avancado
+
+    def _executar_com_contexto(pergunta: str):
+        """Executa o pipeline Advanced RAG uma única vez e retorna (answer, context, metadata)."""
+        return get_pipeline_avancado().invoke(pergunta)
+
 else:
-    from services.rag_agent import gerar_resposta, recuperar_contexto_e_metadata
+    from services.rag_agent import gerar_resposta
+    from services.rag_agent import gerar_resposta_com_contexto
+
+    def _executar_com_contexto(pergunta: str):
+        """Executa o RAG simples uma única vez e retorna (answer, context, metadata)."""
+        return gerar_resposta_com_contexto(pergunta)
 
 
 # ==========================================
@@ -57,7 +66,12 @@ class RagasDataset:
 # ==========================================
 def gerar_dados_para_avaliacao(qa_dados: list) -> dict:
     """Passa as perguntas pelo pipeline RAG ativo e estrutura os dados para o Ragas."""
-    pipeline_nome = "Advanced RAG" if _use_advanced else "RAG Simples"
+    if _use_crag:
+        pipeline_nome = "CRAG"
+    elif _use_advanced:
+        pipeline_nome = "Advanced RAG"
+    else:
+        pipeline_nome = "RAG Simples"
     dataset_ragas = RagasDataset()
 
     print(f"⏳ Processando {len(qa_dados)} perguntas [{pipeline_nome}]...\n")
@@ -68,8 +82,7 @@ def gerar_dados_para_avaliacao(qa_dados: list) -> dict:
 
         print(f"[{i}/{len(qa_dados)}] {pergunta}")
 
-        resposta_ia, _ = gerar_resposta(pergunta)
-        contexto_texto, _ = recuperar_contexto_e_metadata(pergunta)
+        resposta_ia, contexto_texto, _ = _executar_com_contexto(pergunta)
 
         dataset_ragas.adicionar_amostra(
             pergunta=pergunta,

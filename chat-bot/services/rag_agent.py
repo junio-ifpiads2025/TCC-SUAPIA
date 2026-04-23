@@ -50,6 +50,40 @@ def recuperar_contexto_e_metadata(pergunta: str):
         logger.error("RETRIEVAL", f"Erro no pgvector: {e}")
         return "", []
 
+def gerar_resposta_com_contexto(pergunta: str):
+    """Orquestra o RAG retornando (answer, context_str, metadata) em uma única passagem."""
+    contexto, metadados = recuperar_contexto_e_metadata(pergunta)
+
+    if not contexto:
+        logger.warn("RAG", "Nenhum contexto encontrado nos manuais.")
+        return "Desculpe, não encontrei informações sobre isso nos manuais.", "", []
+
+    prompt_contexto = (
+        "CONTEXTO RECUPERADO DOS MANUAIS:\n"
+        "-----------------------------------\n"
+        f"{contexto}\n"
+        "-----------------------------------\n"
+        f"PERGUNTA DO USUÁRIO: {pergunta}"
+    )
+
+    try:
+        logger.info("LLM", f"Chamando modelo {MODELO_LLM}…")
+        res_openai = openai_client.chat.completions.create(
+            model=MODELO_LLM,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt_contexto},
+            ],
+            temperature=TEMPERATURE,
+        )
+        resposta_final_texto = res_openai.choices[0].message.content
+        logger.success("LLM", "Resposta gerada com sucesso.")
+        return resposta_final_texto, contexto, metadados
+    except Exception as e:
+        logger.error("LLM", f"Erro na OpenAI: {e}")
+        return "Desculpe, tive um erro ao processar sua pergunta.", contexto, []
+
+
 def gerar_resposta(pergunta: str):
     """Orquestra o RAG: Recupera contexto e gera resposta com OpenAI."""
     
