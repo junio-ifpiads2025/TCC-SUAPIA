@@ -1,0 +1,239 @@
+[
+    {
+        "manual": "Restaurante Institucional IFPI",
+        "versao": "1.0",
+        "topicos": [
+            {
+                "topico": "Área do Aluno",
+                "texto": "Manual direcionado aos \"Alunos\" Área do Aluno",
+                "links_imagens": []
+            },
+            {
+                "topico": "Reservar Refeição com Acesso a Conta do Suap",
+                "texto": "Acesse sua conta do suap Acesse o menu: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Reservar Refeições Clique no botão Reservar da refeição disponível para reserva Nota: Para que a reserva seja realizada com sucesso é necessário atender os requisitos abaixo: - Aluno precisa está matriculado - A quantidade de reservas não podem ser igual a quantidade da refeição liberada - Aguarde o início das reservas - Reservar antes do horário de encerramento das reservas Reserva realizada com sucesso Área do Aluno",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/SOwthTN95AGha6OP-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/LiYHo46bzBiURSmy-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/BBJohS5riEfiNKRX-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/Wjzcjaq1fJc5zLoR-image.png"
+                ]
+            },
+            {
+                "topico": "Reservar Refeição sem Acesso a Conta do Suap",
+                "texto": "Acesse a página inicial do Suap (página de Login IFPI ) e vá em ATIVIDADES ESTUDANTIS - Refeições Selecione o campus e depois clique no botão Enviar Caso exista refeições liberadas para reservas, clique no botão Reservar Informe sua matrícula e data de nascimento Se tudo ocorrer bem, a reserva será realizada com sucesso Área do Aluno",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/e9OChbcaydGHrAq9-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/OBE7Vyi3hLwtS1QL-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/ROWgtoqrzkygJgY4-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/a774WwVprw3kSzLN-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/mXWcIuRpz9JkPl08-image.png"
+                ]
+            },
+            {
+                "topico": "Buscar Reservas",
+                "texto": "Acesse o menu: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Minhas Reservas Área do Aluno",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/R0CDtANEHlC9LyWu-image.png"
+                ]
+            },
+            {
+                "topico": "Cancelar Reserva",
+                "texto": "Acesse o menu: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Minhas Reservas Busque a reserva que deseja cancelar Clique no botão Cancelar Nota: O aluno pode cancelar sua reserva até 30 min antes do horário de encerramento das reservas. - Caso o aluno faça uma reserva e não consumir, ele fica sem poder reservar posteriormente o mesmo tipo de refeição não consumida até que se justifique no setor responsável. Área do Aluno",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/8QSE7IT4KrbyIk9T-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/o95LOsOaFOqRlgRa-image.png"
+                ]
+            },
+            {
+                "topico": "Visualizar Justificatica de Reservas de Refeições não Consumidas",
+                "texto": "Acesse o menu: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Minhas Reservas Busque pela reserva Clique no botão Ver Justificativa Tela da Justificativa Área do Aluno",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/waX1VJv9sS9CijPv-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/OfYBSjvIB4yK5g4w-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/uYrweAblDx387DBk-image.png"
+                ]
+            },
+            {
+                "topico": "Imprimir Carteirinha para Acesso ao Restaurante Institucional",
+                "texto": "Acesse sua conta do SUAP Clique no seu perfil/nome localizado no canto superior esquerdo. Nota: O acesso do aluno ao espaço físico do restaurante institucional se dá por meio da leitura do código de barra da carteirinha. Clique no botão Documentos Clique no botão Imprimir Carteirinha Nota: O aluno poderá usar a carteirinha no celular ou impressa Área do Aluno",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/4OJF2SI214UILnBt-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/eXgni6TEnbt1bBgm-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/R17jctEmFNj6aBn7-image.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/fwnrayFpklFcPqHJ-image.png"
+                ]
+            },
+            {
+                "topico": "Sistema de Controle de acesso ao Restaurante Institucional",
+                "texto": "Tela do Sistema Controle de Acesso ao Restaurante Institucional Nota: Com a carteirinha em mãos, aponte o código de barra no leitor de código de barra do Sistema Controle de acesso ao Restaurante Institucional que se encontra posicionado na entrada do restaurante.",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-05/4FlQYooY44XkNhVj-image.png"
+                ]
+            },
+            {
+                "topico": "Área da Diretoria de Assistência Estudantil",
+                "texto": "Manual direcionado à \" Diretoria de Assistência Estudantil\" Área da Diretoria de Assistência Estudantil",
+                "links_imagens": []
+            },
+            {
+                "topico": "Dashboard das Refeições",
+                "texto": "Faça o login no SUAP Acesse a página Dashboard Refeições no menu: ATIVIDADES ESTUDANTIS / Restaurante Institucional / Dashboard Refeiçoes Página Dashboar Refeições OBS: Para gerar dados, preencha os campos dos filtros. Resultados das buscas Área da Diretoria de Assistência Estudantil",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-06/KXAsHtyP7CeSvDmw-01-acesso-suap.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-06/niKaypkYhWfx1OpQ-dash-refeicoes.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-06/OexZOj4FW3VsBtaS-pagina-dash-refeicoes.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-06/rQyJmJtijiEKXXSY-resultado-busca-dashboard.png"
+                ]
+            },
+            {
+                "topico": "Relatório das Refeições",
+                "texto": "Acesse o SUAP Acesse a página Relatório Refeições no menu: ATIVIDADES ESTUDANTIS / Restaurante Institucional / Relatório Refeições Página Relatório Refeições Resultado das buscas pelos campos dos filtros OBS: O relatório só mostra os campus que possuem refeições liberadas no período",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-06/xeeqDE9G9Yncijrt-menu-relatorio-refeicoes.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-06/nf8mEWo3OipgkoV8-pagina-relatorio-refeicao.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-06/1fd6UWYM9L7MPV3K-resultado-busca.png"
+                ]
+            },
+            {
+                "topico": "Área Nutricionista",
+                "texto": "Manual direcionado à \"Nutricionista\" Área Nutricionista",
+                "links_imagens": []
+            },
+            {
+                "topico": "Criar Refeição",
+                "texto": "Faça o login no SUAP : Acesse: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Refeições : Preencha o formulário e salve : Área Nutricionista",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/iaqvYC38ERfxBSf9-login.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/gBPhJLpJFsY7Jwo3-criar-refeicao.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/BmI0s0oMuacqOS8u-formulario-refeicao.png"
+                ]
+            },
+            {
+                "topico": "Detalhe Refeição",
+                "texto": "Acesse: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Refeições Clique no botão \"Detalhar\" da refeição Página de detalhe da refeição Área Nutricionista",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/P7yb0REYy1axgUfI-botao-detalhe.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/MgkCBJKulMrRJsJy-detalhe.png"
+                ]
+            },
+            {
+                "topico": "Clonar Refeição",
+                "texto": "Acesse: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Refeições Clique no botão \"Clonar\" da refeição Edite a refeição clonada Área Nutricionista",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/9k7BeJPSNJ4k6PYD-clonar.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/cqqbZPf9SeCGNu3a-edita-refeicao-clonada.png"
+                ]
+            },
+            {
+                "topico": "Editar Refeição",
+                "texto": "Acesse: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Refeições Clique no botão \"Editar\" da refeição Preencha o formulário e salve Área Nutricionista",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/Dst6RT4ycYGm3Mrd-editar.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/ovPKeT7fMECX5PLV-form-editar.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/CvOqQJOr0dZfAq6r-screenshot-127-0-0-1-8000-2024-09-26-14-25-51.png"
+                ]
+            },
+            {
+                "topico": "Buscar Refeições",
+                "texto": "Acesse: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Refeições Utilize os campos para filtrar as buscas de refeições Área Nutricionista",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/8XkB5endljG2cwxW-screenshot-127-0-0-1-8000-2024-09-26-14-32-46.png"
+                ]
+            },
+            {
+                "topico": "Reservas de Refeições",
+                "texto": "Acesse: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Reservas Refeições Área Nutricionista",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/PyFNl5o42BDDKPkj-screenshot-127-0-0-1-8000-2024-09-26-14-41-53.png"
+                ]
+            },
+            {
+                "topico": "Justificar Reservas de Refeições não Consumidas",
+                "texto": "Acesse: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Reservas Refeições Preencha a o formulário de justificativa e salve. Visualizar justificativa Tela da Justificativa Área Nutricionista",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/P3dgqMUMKnmd224k-screenshot-127-0-0-1-8000-2024-09-26-14-47-26.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/ZzPRVLvD97GIKO8p-screenshot-127-0-0-1-8000-2024-09-26-14-54-16.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/LObkwRifQDFN8NB7-screenshot-127-0-0-1-8000-2024-09-26-14-57-20.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/HdbdkTRZRKIRaHgi-screenshot-127-0-0-1-8000-2024-09-26-14-58-30.png"
+                ]
+            },
+            {
+                "topico": "Acompanhar Reservas Enviadas e Recebidas entre os Campus e o SUAP",
+                "texto": "Acesse: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Reservas Refeições Reservas enviadas do SUAP para o Campus Reservas recebidas do Campus para o SUAP Área Nutricionista",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/lfeak0HhWMeRPtgX-screenshot-127-0-0-1-8000-2024-09-26-15-01-53.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/dXsx0CLCJmj0dVp6-screenshot-127-0-0-1-8000-2024-09-26-15-08-02.png"
+                ]
+            },
+            {
+                "topico": "Dashboard das Refeições",
+                "texto": "Acesse: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Dashboard Refeições :",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-11/VCOc9qWL2bl1HWDR-dashboard.png"
+                ]
+            },
+            {
+                "topico": "Área Justificador de Reservas de Refeições não Consumidas",
+                "texto": "Manual direcionado ao \" Justificador de Reservas de Refeições não Consumidas\" Área Justificador de Reservas de Refeições não Consumidas",
+                "links_imagens": []
+            },
+            {
+                "topico": "Justificar reservas de refeições não Consumidas",
+                "texto": "Acesse: ATIVIDADES ESTUDANTIS - Restaurante Institucional - Reservas Refeições Preencha a o formulário de justificativa e salve. Visualizar justificativa Tela da Justificativa",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/P3dgqMUMKnmd224k-screenshot-127-0-0-1-8000-2024-09-26-14-47-26.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/ZzPRVLvD97GIKO8p-screenshot-127-0-0-1-8000-2024-09-26-14-54-16.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/LObkwRifQDFN8NB7-screenshot-127-0-0-1-8000-2024-09-26-14-57-20.png",
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-09/HdbdkTRZRKIRaHgi-screenshot-127-0-0-1-8000-2024-09-26-14-58-30.png"
+                ]
+            },
+            {
+                "topico": "Sistema de Controle de Acesso ao Restaurante Institucional",
+                "texto": "Manual do sistema de controle de acesso dos alunos ao Restaurante Institucional. Sistema de Controle de Acesso ao Restaurante Institucional",
+                "links_imagens": []
+            },
+            {
+                "topico": "Tela Principal",
+                "texto": "Sistema de Controle de Acesso ao Restaurante Institucional",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-11/dDAJ6csmjKqPUWrn-1-tela-inicio.png"
+                ]
+            },
+            {
+                "topico": "Cadastro do Campus",
+                "texto": "Clique no botão \"Opções\" no canto superior esquerdo da tela Clique em \"Campus\" Clique em \"Cadastrar\" Sistema de Controle de Acesso ao Restaurante Institucional",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-11/GTAyjvQBEV7GuJgQ-2-cadastro-campus.png"
+                ]
+            },
+            {
+                "topico": "Puxar Reservas do Suap",
+                "texto": "Clique no botão \"Opções\" no canto superior esquerdo da tela Clique em \"Sincronizar com Suap\" Clique em \"Puxar Reservas Refeições\" Sistema de Controle de Acesso ao Restaurante Institucional",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-11/wIGOg4gRXXFBuR3t-3-puxar-reservas.png"
+                ]
+            },
+            {
+                "topico": "Empurrar Reservas para o SUAP",
+                "texto": "Clique no botão \"Opções\" no canto superior esquerdo da tela Clique em \"Sincronizar com Suap\" Clique em \"Empurrar Reservas Refeições\" Sistema de Controle de Acesso ao Restaurante Institucional",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-11/5TDtNYLkRhfcp4eX-4-empurrar-reservas.png"
+                ]
+            },
+            {
+                "topico": "Acesso ao Restaurante Institucional",
+                "texto": "Escolha o tipo de Refeição Deixe o cursor do mouse no campo \"Matrícula\" Passe o leitor de código de barras no código de barras da carteirinha do aluno Nota: Caso o aluno tenha reserva da refeição informada, seu acesso será liberado; caso contrário, seu acesso não permitido. Sistema de Controle de Acesso ao Restaurante Institucional",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-11/tHYffgYwAy4GQrp3-5-acesso-restaurante.png"
+                ]
+            },
+            {
+                "topico": "Sair do Sistema",
+                "texto": "Clique no botão \"Opções\" no canto superior esquerdo da tela Clique em \"Sair\" Nota: Ao sair, o sistema verifica se há reservas pendentes de envio para o SUAP e as envia.",
+                "links_imagens": [
+                    "https://manuais.ifpi.edu.br/uploads/images/gallery/2024-11/bQzXE8IJ11apVKxo-6-sair.png"
+                ]
+            }
+        ]
+    }
+]

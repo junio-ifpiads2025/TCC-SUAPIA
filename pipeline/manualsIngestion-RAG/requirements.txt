@@ -1,0 +1,9 @@
+langchain
+langchain-openai
+langchain-postgres
+langchain-text-splitters
+psycopg[binary]
+python-dotenv
+ipykernel
+uvicorn
+fastapi

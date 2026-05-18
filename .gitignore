@@ -1,3 +1,7 @@
+# Python cache
+**/__pycache__/
+**/*.pyc
+
 # Ignorar arquivos .env em qualquer pasta
 .env
 
