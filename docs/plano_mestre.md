@@ -15,7 +15,7 @@
 | LLM | OpenAI (gpt-4o-mini) |
 | Embeddings | OpenAI text-embedding-3-small |
 | Reranking | Cohere rerank-v3 |
-| Agente MCP | suap-mcp (local, `-e`) |
+| Agente MCP | suap-mcp (git `-e`) |
 | Fila | Tabela PostgreSQL (FIFO por chat_id) |
 
 ---

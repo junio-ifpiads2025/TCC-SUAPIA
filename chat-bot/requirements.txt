@@ -15,4 +15,4 @@ redis[hiredis]
 sqlalchemy[asyncio]
 httpx
 python-multipart
--e /home/juniophb2004/Desktop/suap-mcp
+-e git+https://github.com/frjunioalves/suap-mcp.git#egg=suap-mcp

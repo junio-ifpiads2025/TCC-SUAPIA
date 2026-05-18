@@ -2,7 +2,7 @@
 
 > Requisitos cobertos: RF17, RF18, RF19, RF20 | Regras: RN11, RN12, RN13
 
-**Depende de:** Épico 1 (token no Redis), Épico 3 (processador de fila), `suap-mcp` instalado localmente
+**Depende de:** Épico 1 (token no Redis), Épico 3 (processador de fila), `suap-mcp` (git `-e`)
 
 ---
 

@@ -20,6 +20,7 @@ Receber mensagens via webhook, validá-las, enfileirá-las no PostgreSQL e proce
 | `services/queue_service.py` | Criar |
 | `models/database.py` | Atualizar — model `MessageQueue` |
 | `main.py` | Atualizar — incluir router + lifespan para worker |
+| `routes/admin.py` | Criar — painel HTML GET /admin/queue |
 
 ---
 
@@ -85,6 +86,101 @@ Garantir (na migration 002):
 
 ---
 
+### 3.5 — `routes/admin.py` — Painel de fila (monitoramento)
+
+```python
+GET /admin/queue
+```
+
+Endpoint de uso interno para visualizar mensagens que estão aguardando ou em processamento na fila do PostgreSQL.
+
+**Comportamento:**
+1. Buscar do banco todas as mensagens com `status IN ('pending', 'processing')`, ordenadas por `created_at ASC`.
+2. Retornar uma `HTMLResponse` com uma tabela HTML simples contendo os dados.
+3. Não requer autenticação por ora (uso local/dev); em produção proteger com IP allowlist ou Basic Auth.
+
+**Implementação sugerida em `routes/admin.py`:**
+
+```python
+from fastapi import APIRouter
+from fastapi.responses import HTMLResponse
+from models.database import MessageQueue
+from sqlalchemy import select
+from db import async_session  # sessão AsyncSession do projeto
+
+router = APIRouter(prefix="/admin", tags=["admin"])
+
+@router.get("/queue", response_class=HTMLResponse)
+async def queue_dashboard():
+    async with async_session() as session:
+        result = await session.execute(
+            select(MessageQueue)
+            .where(MessageQueue.status.in_(["pending", "processing"]))
+            .order_by(MessageQueue.created_at.asc())
+        )
+        rows = result.scalars().all()
+
+    rows_html = "".join(
+        f"<tr>"
+        f"<td>{r.id}</td>"
+        f"<td>{r.chat_id}</td>"
+        f"<td style='max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>{r.content}</td>"
+        f"<td><span style='color:{'orange' if r.status == 'processing' else 'steelblue'}'>{r.status}</span></td>"
+        f"<td>{r.created_at.strftime('%d/%m/%Y %H:%M:%S')}</td>"
+        f"<td>{r.updated_at.strftime('%d/%m/%Y %H:%M:%S') if r.updated_at else '—'}</td>"
+        f"</tr>"
+        for r in rows
+    )
+
+    html = f"""<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="10">
+  <title>SUAP-IA · Fila de Mensagens</title>
+  <style>
+    body {{ font-family: sans-serif; padding: 2rem; background: #f5f5f5; }}
+    h1   {{ color: #333; }}
+    table {{ border-collapse: collapse; width: 100%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.15); }}
+    th, td {{ border: 1px solid #ddd; padding: .6rem 1rem; text-align: left; font-size: .9rem; }}
+    th {{ background: #4a90d9; color: #fff; }}
+    tr:nth-child(even) {{ background: #f9f9f9; }}
+    .badge {{ padding: 2px 8px; border-radius: 4px; color: #fff; font-size: .8rem; }}
+    .empty {{ color: #888; font-style: italic; padding: 1rem; }}
+    footer {{ margin-top: 1rem; font-size: .8rem; color: #aaa; }}
+  </style>
+</head>
+<body>
+  <h1>SUAP-IA · Fila de Mensagens Pendentes</h1>
+  <p>Total aguardando resposta: <strong>{len(rows)}</strong> &nbsp;|&nbsp; Página atualiza automaticamente a cada 10s.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>#ID</th><th>chat_id</th><th>Conteúdo</th><th>Status</th><th>Criado em</th><th>Atualizado em</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows_html if rows_html else '<tr><td colspan="6" class="empty">Nenhuma mensagem aguardando.</td></tr>'}
+    </tbody>
+  </table>
+  <footer>SUAP-IA TCC · somente mensagens com status <em>pending</em> ou <em>processing</em> são exibidas.</footer>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
+```
+
+**Registrar em `main.py`:**
+```python
+from routes.admin import router as admin_router
+app.include_router(admin_router)
+```
+
+**Notas:**
+- A tag `<meta http-equiv="refresh" content="10">` recarrega a página a cada 10 segundos, funcionando como um painel live sem JavaScript extra.
+- Em produção, remover ou proteger com middleware de Basic Auth ou restrição de IP (`X-Forwarded-For` / `request.client.host`).
+
+---
+
 ## Critérios de Aceite
 
 - **RF08:** Webhook recebe payload, extrai `chat_id` e `content`.
@@ -96,3 +192,4 @@ Garantir (na migration 002):
 - **RN06:** Após 25 mensagens no dia, novas mensagens retornam aviso; contador reseta meia-noite BRT.
 - **RN07:** Mensagens em `processing` há mais de `QUEUE_TIMEOUT_MINUTES` viram `failed`.
 - **RN08:** Dois `chat_id`s distintos são processados simultaneamente; mesmo `chat_id` respeitado em FIFO.
+- **Admin:** `GET /admin/queue` retorna HTML com todas as mensagens `pending`/`processing` ordenadas por `created_at`; página recarrega automaticamente a cada 10s.
