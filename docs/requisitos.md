@@ -130,6 +130,12 @@ Cada requisito funcional é descrito por três elementos: **Descrição** (o que
 | **RF21** | **Descrição:** Após o agente gerar a resposta, o sistema deve enviá-la ao usuário via WAHA Client. Se o envio falhar, a mensagem deve ser marcada como `failed` e o erro registrado em log. **Critério de Aceite:** Entrega confirmada → status `completed` e `thread_history` atualizado. Falha → status `failed` com erro logado. **Dependências:** WAHA; Épicos 4 e 5; PostgreSQL. |
 | **RF22** | **Descrição:** A resposta gerada e a mensagem original do usuário devem ser registradas no histórico conversacional, vinculadas ao `chat_id`, para que interações futuras possam recuperar o contexto. **Critério de Aceite:** Cada ciclo de interação (mensagem do usuário + resposta do sistema) é persistido na tabela `thread_history`. **Dependências:** PostgreSQL; RF21. |
 
+### Regras de Negócio
+
+| ID | Regra |
+|----|-------|
+| **RN14** | *(WAHA-específico — não faz parte do contrato público de mensageria)* Para reduzir o risco de bloqueio do número, toda mensagem de texto enviada via WAHA deve seguir obrigatoriamente a sequência: **(1)** marcar a mensagem do usuário como lida (`sendSeen`); **(2)** ativar o indicador "digitando..." (`startTyping`); **(3)** aguardar um intervalo aleatório proporcional ao tamanho da resposta (mínimo 1 s, máximo 8 s); **(4)** encerrar o indicador (`stopTyping`); **(5)** enviar o texto (`sendText`). Caso o provider de mensageria seja substituído, esta regra não se aplica ao novo provider — cada implementação deve seguir as diretrizes anti-ban do seu próprio canal. |
+
 ---
 
 ## Requisitos Não Funcionais

@@ -120,3 +120,4 @@ Fase 0 — Infraestrutura (Docker + Migrations)
 - **Erros ao usuário:** Sempre mensagem amigável, sem stack trace (RF07, RN04).
 - **Processamento:** FIFO por `chat_id`; `chat_id`s distintos em paralelo (RN08).
 - **Rate limit:** 25 mensagens/dia por conta, contador em Redis com reset meia-noite BRT (RN06).
+- **Mensageria:** As rotas importam exclusivamente de `services/messaging_client.py` — nunca do provider diretamente. O contrato expõe `enviar_texto`, `enviar_imagem` e `enviar_texto_async`. Comportamentos específicos de provider (ex: anti-ban do WAHA, RN14) vivem no módulo do provider e são invisíveis para o restante da aplicação.

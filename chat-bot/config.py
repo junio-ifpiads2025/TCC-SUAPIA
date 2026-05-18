@@ -13,14 +13,18 @@ PGVECTOR_CONNECTION_STRING = os.getenv(
 )
 PGVECTOR_COLLECTION = os.getenv("PGVECTOR_COLLECTION", "manuais_suap_ifpi")
 
-# --- SUAP MCP ---
+# --- SUAP ---
 SUAP_BASE_URL = os.getenv("SUAP_BASE_URL", "https://suap.ifpi.edu.br")
 SUAP_TOKEN = os.getenv("SUAP_TOKEN", "")
 
+# --- AUTENTICAÇÃO / SESSÃO ---
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
+SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "28800"))  # fallback 8h (RN02)
+MAX_DAILY_MESSAGES = int(os.getenv("MAX_DAILY_MESSAGES", "25"))        # RN06
+
 # --- CONTROLE DE ACESSO ---
-# Converte a string "True" ou "False" do .env para um booleano real do Python
 RESPONDER_QUALQUER_NUMERO = os.getenv("RESPONDER_QUALQUER_NUMERO", "False").lower() in ("true", "1", "t")
 
-# Pega a string com os números e transforma em uma lista real, removendo espaços extras
 _numeros_str = os.getenv("NUMEROS_PERMITIDOS", "")
 NUMEROS_PERMITIDOS = [num.strip() for num in _numeros_str.split(",") if num.strip()]

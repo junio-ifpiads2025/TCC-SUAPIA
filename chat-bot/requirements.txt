@@ -10,4 +10,9 @@ sentence-transformers
 cohere
 ragas
 datasets
+# Épico 1 — autenticação
+redis[hiredis]
+sqlalchemy[asyncio]
+httpx
+python-multipart
 -e /home/juniophb2004/Desktop/suap-mcp
