@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 from services import logger
 from services.mcp_client import SUAPMCPClient
+from config import AGENT_NAME
 
 load_dotenv()
 
@@ -16,9 +17,7 @@ SUAP_BASE_URL = os.getenv("SUAP_BASE_URL", "https://suap.ifpi.edu.br")
 SUAP_TOKEN = os.getenv("SUAP_TOKEN", "")
 MAX_ITERATIONS = int(os.getenv("AGENT_MAX_ITERATIONS", "5"))
 
-AGENT_SYSTEM_PROMPT = os.getenv(
-    "AGENT_SYSTEM_PROMPT",
-)
+AGENT_SYSTEM_PROMPT = os.getenv("AGENT_SYSTEM_PROMPT", "").replace("{AGENT_NAME}", AGENT_NAME) or None
 
 # Schema da ferramenta de busca nos manuais (encapsula o pipeline RAG)
 _SEARCH_MANUALS_SCHEMA = {
@@ -164,6 +163,15 @@ def get_orchestrator() -> AgentOrchestrator:
     return _orchestrator
 
 
-def gerar_resposta_agente(pergunta: str) -> tuple[str, list[dict]]:
-    """Ponto de entrada compatível com a interface dos outros pipelines."""
+def gerar_resposta_agente(pergunta: str, token: str = "") -> tuple[str, list[dict]]:
+    """Ponto de entrada compatível com a interface dos outros pipelines.
+
+    Se token for fornecido, cria um orquestrador com o token do usuário autenticado.
+    Caso contrário, usa o SUAP_TOKEN global (útil para testes).
+    """
+    effective_token = token or SUAP_TOKEN
+    if effective_token != SUAP_TOKEN:
+        from services.advanced_rag_agent import get_pipeline_avancado
+        mcp = SUAPMCPClient(SUAP_BASE_URL, effective_token)
+        return AgentOrchestrator(mcp, get_pipeline_avancado()).invoke(pergunta)
     return get_orchestrator().invoke(pergunta)

@@ -7,6 +7,7 @@ from services import logger
 from services.auth_service import login_with_suap
 from services.session_service import get_onboarding_link, delete_onboarding_link
 from services.messaging_client import enviar_texto_async
+from config import AGENT_NAME, MENU_TEXT
 
 router = APIRouter(prefix="/auth")
 
@@ -14,7 +15,11 @@ _LOGIN_HTML = Path(__file__).parent.parent / "web" / "login.html"
 
 
 def _render_html(token: str) -> str:
-    return _LOGIN_HTML.read_text(encoding="utf-8").replace("{{TOKEN}}", token)
+    return (
+        _LOGIN_HTML.read_text(encoding="utf-8")
+        .replace("{{TOKEN}}", token)
+        .replace("{{AGENT_NAME}}", AGENT_NAME)
+    )
 
 
 def _result_page(title: str, message: str, success: bool) -> str:
@@ -25,7 +30,7 @@ def _result_page(title: str, message: str, success: bool) -> str:
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>SUAP-IA — {title}</title>
+  <title>{AGENT_NAME} — {title}</title>
   <style>
     body{{min-height:100vh;display:flex;align-items:center;justify-content:center;
          background:#f0f4f8;font-family:'Segoe UI',sans-serif;}}
@@ -79,6 +84,7 @@ async def login_submit(
             chat_id,
             "✅ Login realizado com sucesso! Agora você já pode enviar suas perguntas sobre o SUAP aqui no WhatsApp.",
         )
+        background_tasks.add_task(enviar_texto_async, chat_id, MENU_TEXT)
         return HTMLResponse(
             _result_page("Login realizado!", result.message, success=True)
         )

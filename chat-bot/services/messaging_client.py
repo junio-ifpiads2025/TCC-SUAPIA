@@ -1,5 +1,5 @@
 """
-Contrato de mensageria do SUAP-IA.
+Contrato de mensageria do chatbot.
 
 Qualquer provider (WAHA, Meta, Twilio, etc.) deve implementar as 3 funções abaixo
 com exatamente esta assinatura. As rotas importam daqui — nunca do provider diretamente.

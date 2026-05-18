@@ -1,13 +1,11 @@
-import asyncio
-
 from fastapi import APIRouter, BackgroundTasks, Request
 
 from services import logger
-from services.advanced_rag_agent import gerar_resposta_crag
 from services.auth_service import generate_onboarding_link, logout
+from services.message_router import route
 from services.session_service import delete_token, increment_rate, is_authenticated
-from services.messaging_client import enviar_texto, enviar_imagem
-from config import MAX_DAILY_MESSAGES, NUMEROS_PERMITIDOS, RESPONDER_QUALQUER_NUMERO
+from services.messaging_client import enviar_texto
+from config import AGENT_NAME, MAX_DAILY_MESSAGES, NUMEROS_PERMITIDOS, RESPONDER_QUALQUER_NUMERO
 
 router = APIRouter()
 
@@ -30,7 +28,7 @@ async def _processar_mensagem(chat_id: str, body: str) -> None:
         link = await generate_onboarding_link(chat_id)
         enviar_texto(
             chat_id,
-            f"Olá! Para usar o SUAP-IA, acesse o link abaixo para fazer login com sua conta SUAP "
+            f"Olá! Para usar o {AGENT_NAME}, acesse o link abaixo para fazer login com sua conta SUAP "
             f"(válido por 15 minutos):\n\n{link}",
         )
         return
@@ -44,17 +42,10 @@ async def _processar_mensagem(chat_id: str, body: str) -> None:
         )
         return
 
-    # Processa a mensagem via pipeline IA (função síncrona → thread pool)
     logger.incoming(chat_id, body)
-    resposta_ia, lista_metadata = await asyncio.to_thread(gerar_resposta_crag, body)
-    logger.response_log(resposta_ia)
-    enviar_texto(chat_id, resposta_ia)
-
-    # links = {link for m in lista_metadata for link in m.get("links_imagens", []) if link}
-    # if links:
-    #     logger.info("IMAGENS", f"Enviando {len(links)} imagem(ns)...")
-    #     for url in links:
-    #         enviar_imagem(chat_id, url)
+    resposta, _ = await route(chat_id, body)
+    logger.response_log(resposta)
+    enviar_texto(chat_id, resposta)
 
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────

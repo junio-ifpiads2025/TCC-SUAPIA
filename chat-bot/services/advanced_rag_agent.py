@@ -14,6 +14,7 @@ import cohere
 load_dotenv()
 
 from services import logger
+from config import AGENT_NAME
 
 # ---------------------------------------------------------------------------
 # Configuração via variáveis de ambiente
@@ -41,13 +42,13 @@ FALLBACK_MESSAGE = os.getenv(
 SYSTEM_PROMPT = os.getenv(
     "SYSTEM_PROMPT",
     (
-        "Você é um assistente virtual especialista nos manuais do SUAP do IFPI. "
+        "Você é {AGENT_NAME}, um assistente virtual especialista nos manuais do SUAP do IFPI. "
         "Use o CONTEXTO abaixo para responder à pergunta do usuário. "
         "Sempre responda em Português (Brasil). "
         "Se a resposta não estiver no contexto, diga que não sabe. "
         "Não invente informações."
     ),
-)
+).replace("{AGENT_NAME}", AGENT_NAME)
 
 # ---------------------------------------------------------------------------
 # Clientes compartilhados (inicializados uma única vez)

@@ -28,3 +28,21 @@ RESPONDER_QUALQUER_NUMERO = os.getenv("RESPONDER_QUALQUER_NUMERO", "False").lowe
 
 _numeros_str = os.getenv("NUMEROS_PERMITIDOS", "")
 NUMEROS_PERMITIDOS = [num.strip() for num in _numeros_str.split(",") if num.strip()]
+
+# --- IDENTIDADE DO AGENTE ---
+AGENT_NAME = os.getenv("AGENT_NAME", "SUAP-IA")
+
+# --- UX / MENSAGENS ESTÁTICAS (RF05, RF07, RN04) ---
+
+MENU_TEXT = f"""Olá! Sou o {AGENT_NAME} 👋 Posso te ajudar com:
+
+1. Dúvidas sobre o SUAP e manuais institucionais
+2. Seus dados acadêmicos (notas, faltas, disciplinas)
+
+Digite sua pergunta ou use os comandos:
+/menu — exibir este menu
+/sair — encerrar sessão"""
+
+FALLBACK_TEXT = "Desculpe, ocorreu uma instabilidade. Tente novamente em alguns instantes."
+
+UNKNOWN_COMMAND_TEXT = "Comando não reconhecido. Comandos disponíveis: /menu, /sair"
