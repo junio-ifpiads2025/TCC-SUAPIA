@@ -1,0 +1,209 @@
+import json
+import os
+from typing import Any
+
+from suap_api import SuapClient
+from suap_api.exceptions import SuapError
+from dotenv import load_dotenv
+
+from services import logger
+
+load_dotenv()
+
+# Schemas das ferramentas no formato OpenAI tool_calling
+_TOOL_SCHEMAS: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_my_data",
+            "description": "Retorna dados pessoais do usuário autenticado no SUAP (nome, CPF, e-mail, matrícula, foto).",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_student_data",
+            "description": "Retorna dados acadêmicos do aluno autenticado (curso, IRA, período de referência, situação e matrícula).",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_periods",
+            "description": "Lista todos os semestres letivos disponíveis no SUAP.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_disciplines",
+            "description": "Lista as disciplinas de um semestre com notas, frequência e situação de aprovação.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "semestre": {
+                        "type": "string",
+                        "description": "Semestre no formato 'YYYY.N'. Exemplos: '2024.1', '2024.2'.",
+                    }
+                },
+                "required": ["semestre"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_diaries",
+            "description": "Lista os diários de classe de um semestre (disciplinas, professores e ID do diário para chamadas subsequentes).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "semestre": {
+                        "type": "string",
+                        "description": "Semestre no formato 'YYYY.N'. Exemplo: '2024.1'.",
+                    }
+                },
+                "required": ["semestre"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_diary_classes",
+            "description": "Lista as aulas registradas em um diário de classe: data, conteúdo ministrado e faltas.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id_diario": {
+                        "type": "integer",
+                        "description": "ID numérico do diário (obtido via get_diaries).",
+                    }
+                },
+                "required": ["id_diario"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_diary_professors",
+            "description": "Lista os professores vinculados a um diário de classe.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id_diario": {
+                        "type": "integer",
+                        "description": "ID numérico do diário (obtido via get_diaries).",
+                    }
+                },
+                "required": ["id_diario"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_diary_assignments",
+            "description": "Lista os trabalhos e avaliações de um diário com título e data de entrega.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id_diario": {
+                        "type": "integer",
+                        "description": "ID numérico do diário (obtido via get_diaries).",
+                    }
+                },
+                "required": ["id_diario"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_messages",
+            "description": "Lista as mensagens da caixa de entrada do usuário no SUAP.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["nao_lidas", "lidas", "todas"],
+                        "description": "Filtro de leitura: 'nao_lidas' (padrão), 'lidas' ou 'todas'.",
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_graduation_requirements",
+            "description": "Retorna os requisitos para conclusão do curso: carga horária total, cumprida e pendências.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+]
+
+
+class SUAPMCPClient:
+    """
+    Wrapper sobre suap_api que expõe as ferramentas do SUAP no formato OpenAI tool_calling.
+
+    Usa a biblioteca suap_api diretamente (mesma base do suap-mcp),
+    sem overhead de subprocesso/protocolo MCP.
+    """
+
+    def __init__(self, base_url: str, token: str):
+        if not token:
+            logger.warn("MCP_CLIENT", "SUAP_TOKEN não configurado — ferramentas SUAP não funcionarão.")
+        self._client = SuapClient(base_url, token=token)
+        logger.success("MCP_CLIENT", f"SUAPMCPClient inicializado → {base_url}")
+
+    def list_tools(self) -> list[dict]:
+        """Retorna os schemas de todas as ferramentas no formato OpenAI."""
+        return _TOOL_SCHEMAS
+
+    def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
+        """Executa uma ferramenta SUAP e retorna o resultado como string JSON."""
+        logger.info("MCP_CLIENT", f"Executando: {name}({arguments})")
+        try:
+            result = self._dispatch(name, arguments)
+            logger.success("MCP_CLIENT", f"{name} concluído.")
+            return json.dumps(result, ensure_ascii=False, indent=2)
+        except SuapError as e:
+            logger.error("MCP_CLIENT", f"Erro SUAP em {name}: {e}")
+            return json.dumps({"error": str(e)})
+        except Exception as e:
+            logger.error("MCP_CLIENT", f"Erro inesperado em {name}: {e}")
+            return json.dumps({"error": f"Erro interno: {e}"})
+
+    def _dispatch(self, name: str, args: dict) -> Any:
+        match name:
+            case "get_my_data":
+                return self._client.comum.get_my_data().raw
+            case "get_student_data":
+                return self._client.edu.get_student_data().raw
+            case "get_periods":
+                return [p.raw for p in self._client.edu.get_periods()]
+            case "get_disciplines":
+                return [d.raw for d in self._client.edu.get_disciplines(args["semestre"])]
+            case "get_diaries":
+                return [d.raw for d in self._client.edu.get_diaries(args["semestre"])]
+            case "get_diary_classes":
+                return [c.raw for c in self._client.edu.get_diary_classes(args["id_diario"])]
+            case "get_diary_professors":
+                return [p.raw for p in self._client.edu.get_diary_professors(args["id_diario"])]
+            case "get_diary_assignments":
+                return [a.raw for a in self._client.edu.get_diary_assignments(args["id_diario"])]
+            case "get_messages":
+                status = args.get("status", "nao_lidas")
+                return [m.raw for m in self._client.edu.get_messages(status)]
+            case "get_graduation_requirements":
+                return self._client.edu.get_graduation_requirements().raw
+            case _:
+                raise ValueError(f"Ferramenta desconhecida: '{name}'")

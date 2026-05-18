@@ -10,3 +10,4 @@ sentence-transformers
 cohere
 ragas
 datasets
+-e /home/juniophb2004/Desktop/suap-mcp
