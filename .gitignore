@@ -2,11 +2,10 @@
 **/__pycache__/
 **/*.pyc
 
-# Ignorar arquivos .env em qualquer pasta
+# Arquivos de variáveis de ambiente (exceto .env.example)
 .env
-
-# Se quiser pegar variações tipo .env.local, .env.dev, etc
-.env/
+.env.*
+!.env.example
 
 # Ignorar qualquer pasta venv (em qualquer nível)
 venv/

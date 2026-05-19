@@ -6,9 +6,10 @@ services:
       WHATSAPP_HOOK_URL: http://host.docker.internal:8002/webhook
       WHATSAPP_DEFAULT_ENGINE: WEBJS
       WHATSAPP_HOOK_EVENTS: message.any
-      WAHA_NO_API_KEY: true
       WAHA_DASHBOARD_NO_PASSWORD: true
       WHATSAPP_SWAGGER_NO_PASSWORD: true
+      WAHA_API_KEY: '123456789abcdef' # Valor fictício, substitua pela sua chave real
+      WAHA_API_KEY_PLAIN: '123456789abcdef'
     volumes:
       - ./waha_sessions:/app/.sessions
       - ./waha_media:/app/.media

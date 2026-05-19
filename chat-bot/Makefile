@@ -9,8 +9,8 @@ APP = main:app
 help:
 	@echo "Comandos disponíveis:"
 	@echo "  make install  — cria venv e instala dependências"
-	@echo "  make dev      — inicia servidor em modo desenvolvimento (reload automático)"
-	@echo "  make prod     — inicia servidor em modo produção"
+	@echo "  make dev      — inicia servidor em modo desenvolvimento (reload automático, usa .env)"
+	@echo "  make prod     — inicia servidor em modo produção (usa .env.prod)"
 
 install:
 	python3 -m venv $(VENV)
@@ -18,7 +18,7 @@ install:
 	$(PIP) install -r requirements.txt
 
 dev:
-	$(UVICORN) $(APP) --host 0.0.0.0 --port 8002 --reload
+	bash -c 'set -a && source .env.dev && set +a && $(UVICORN) $(APP) --host 0.0.0.0 --port 8002 --reload'
 
 prod:
-	$(UVICORN) $(APP) --host 0.0.0.0 --port 8002 --workers 4
+	bash -c 'set -a && source .env.prod && set +a && $(UVICORN) $(APP) --host 0.0.0.0 --port 8002 --workers 4'
