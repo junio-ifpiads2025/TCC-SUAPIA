@@ -17,7 +17,7 @@ SUAP_BASE_URL = os.getenv("SUAP_BASE_URL", "https://suap.ifpi.edu.br")
 SUAP_TOKEN = os.getenv("SUAP_TOKEN", "")
 MAX_ITERATIONS = int(os.getenv("AGENT_MAX_ITERATIONS", "5"))
 
-AGENT_SYSTEM_PROMPT = os.getenv("AGENT_SYSTEM_PROMPT", "").replace("{AGENT_NAME}", AGENT_NAME) or None
+AGENT_SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", "").replace("{AGENT_NAME}", AGENT_NAME) or None
 
 # Schema da ferramenta de busca nos manuais (encapsula o pipeline RAG)
 _SEARCH_MANUALS_SCHEMA = {
@@ -68,10 +68,10 @@ class AgentOrchestrator:
         logger.phase(1, "Agente: Iniciando loop ReAct")
         logger.info("AGENTE", f"Pergunta: {user_query}")
 
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": AGENT_SYSTEM_PROMPT},
-            {"role": "user", "content": user_query},
-        ]
+        messages: list[dict[str, Any]] = []
+        if AGENT_SYSTEM_PROMPT:
+            messages.append({"role": "system", "content": AGENT_SYSTEM_PROMPT})
+        messages.append({"role": "user", "content": user_query})
         rag_metadata: list[dict] = []
 
         for iteration in range(1, MAX_ITERATIONS + 1):

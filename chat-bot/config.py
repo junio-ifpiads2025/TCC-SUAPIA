@@ -19,7 +19,7 @@ SUAP_TOKEN = os.getenv("SUAP_TOKEN", "")
 
 # --- AUTENTICAÇÃO / SESSÃO ---
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8002")
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "28800"))  # fallback 8h (RN02)
 MAX_DAILY_MESSAGES = int(os.getenv("MAX_DAILY_MESSAGES", "25"))        # RN06
 
@@ -36,10 +36,14 @@ AGENT_NAME = os.getenv("AGENT_NAME", "SUAP-IA")
 
 MENU_TEXT = f"""Olá! Sou o {AGENT_NAME} 👋 Posso te ajudar com:
 
-1. Dúvidas sobre o SUAP e manuais institucionais
-2. Seus dados acadêmicos (notas, faltas, disciplinas)
+- Dúvidas sobre o SUAP e manuais institucionais
+- Seus dados acadêmicos (notas, faltas, disciplinas)
 
-Digite sua pergunta ou use os comandos:
+Basta digitar sua pergunta diretamente! Por exemplo:
+"Como trancar matrícula?"
+"Quais são minhas notas?"
+
+Comandos disponíveis:
 /menu — exibir este menu
 /sair — encerrar sessão"""
 
