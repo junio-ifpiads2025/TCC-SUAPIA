@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 # Ajusta o path para importar os serviços do bot
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'chat-bot')))
 
 # Seleção do pipeline de acordo com a variável de ambiente
 _use_crag = os.getenv("USE_CRAG", "false").lower() in ("true", "1", "t")

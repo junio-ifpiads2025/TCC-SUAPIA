@@ -15,7 +15,7 @@
 | LLM | OpenAI (gpt-4o-mini) |
 | Embeddings | OpenAI text-embedding-3-small |
 | Reranking | Cohere rerank-v3 |
-| Agente MCP | suap-mcp (git `-e`) |
+| Agente MCP | suap-mcp (local, `-e`) |
 | Fila | Tabela PostgreSQL (FIFO por chat_id) |
 
 ---
@@ -106,7 +106,7 @@ Fase 0 — Infraestrutura (Docker + Migrations)
 | Épico 1 — Autenticação | [planos/epico1_autenticacao.md](planos/epico1_autenticacao.md) | pendente |
 | Épico 2 — UX e Roteamento | [planos/epico2_ux.md](planos/epico2_ux.md) | pendente |
 | Épico 3 — Pipeline e Fila | [planos/epico3_pipeline.md](planos/epico3_pipeline.md) | pendente |
-| Épico 4 — Agente RAG | [planos/epico4_rag.md](planos/epico4_rag.md) | pendente |
+| Épico 4 — Agente RAG (parcialmente ou quase todo implementado) | [planos/epico4_rag.md](planos/epico4_rag.md) | pendente |
 | Épico 5 — Agente MCP SUAP | [planos/epico5_mcp_suap.md](planos/epico5_mcp_suap.md) | pendente |
 | Épico 6 — Resposta Outbound | [planos/epico6_resposta.md](planos/epico6_resposta.md) | pendente |
 

@@ -1,0 +1,9 @@
+services:
+  suapia-chatbot:
+    build: .
+    container_name: suapia_chatbot
+    restart: always
+    env_file:
+      - .env.dev
+    ports:
+      - "8002:8002"
