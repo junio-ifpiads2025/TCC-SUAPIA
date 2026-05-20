@@ -26,6 +26,7 @@ from services.auth_service import generate_onboarding_link, logout
 from services.message_router import route
 from services.messaging_client import enviar_texto_async
 from services.session_service import delete_token, increment_rate, is_authenticated
+from services import thread_service
 
 
 async def enqueue(chat_id: str, content: str) -> None:
@@ -42,6 +43,7 @@ async def enqueue(chat_id: str, content: str) -> None:
     if content.strip() == "/sair":
         await delete_token(chat_id)
         await logout(chat_id)
+        await thread_service.clear_thread(chat_id)  # apaga histórico junto com a sessão
         await enviar_texto_async(
             chat_id,
             "Sessão encerrada. Na próxima mensagem você receberá o link de login.",

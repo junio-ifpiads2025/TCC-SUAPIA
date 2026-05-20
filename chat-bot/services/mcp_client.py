@@ -1,16 +1,29 @@
+"""
+Cliente SUAP para tool-calling do agente ReAct.
+
+Encapsula a biblioteca suap_api e expõe as ferramentas no formato
+OpenAI tool-calling (lista de schemas + método call_tool).
+
+Conformidade com RN13:
+- O token nunca aparece em logs (sanitize_log cobre 'authorization').
+- Argumentos das ferramentas são logados normalmente (não contêm token).
+- Erros da API retornam JSON estruturado em vez de lançar exceção,
+  para que o LLM possa formular uma resposta amigável ao usuário.
+"""
+
 import json
-import os
 from typing import Any
 
 from suap_api import SuapClient
 from suap_api.exceptions import SuapError
-from dotenv import load_dotenv
 
 from services import logger
+from utils.security import sanitize_log
 
-load_dotenv()
-
+# ---------------------------------------------------------------------------
 # Schemas das ferramentas no formato OpenAI tool_calling
+# ---------------------------------------------------------------------------
+
 _TOOL_SCHEMAS: list[dict] = [
     {
         "type": "function",
@@ -154,13 +167,15 @@ class SUAPMCPClient:
     """
     Wrapper sobre suap_api que expõe as ferramentas do SUAP no formato OpenAI tool_calling.
 
-    Usa a biblioteca suap_api diretamente (mesma base do suap-mcp),
-    sem overhead de subprocesso/protocolo MCP.
+    Uma instância é criada por requisição do usuário, com o token individual do aluno
+    recuperado do Redis (RF17). Nunca reutiliza token de outro usuário.
     """
 
     def __init__(self, base_url: str, token: str):
         if not token:
-            logger.warn("MCP_CLIENT", "SUAP_TOKEN não configurado — ferramentas SUAP não funcionarão.")
+            logger.warn("MCP_CLIENT", "Token ausente — ferramentas SUAP retornarão erro.")
+        # O token é armazenado internamente pelo SuapClient e usado nos headers HTTP.
+        # Nunca é logado diretamente (RN13).
         self._client = SuapClient(base_url, token=token)
         logger.success("MCP_CLIENT", f"SUAPMCPClient inicializado → {base_url}")
 
@@ -169,8 +184,14 @@ class SUAPMCPClient:
         return _TOOL_SCHEMAS
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
-        """Executa uma ferramenta SUAP e retorna o resultado como string JSON."""
-        logger.info("MCP_CLIENT", f"Executando: {name}({arguments})")
+        """
+        Executa uma ferramenta SUAP e retorna o resultado como string JSON.
+
+        Erros são capturados e retornados como JSON estruturado para que o LLM
+        possa formular uma resposta amigável sem expor detalhes técnicos ao aluno.
+        Os argumentos são sanitizados antes de logar (RN13).
+        """
+        logger.info("MCP_CLIENT", f"Executando: {name}({sanitize_log(arguments)})")
         try:
             result = self._dispatch(name, arguments)
             logger.success("MCP_CLIENT", f"{name} concluído.")
@@ -180,9 +201,10 @@ class SUAPMCPClient:
             return json.dumps({"error": str(e)})
         except Exception as e:
             logger.error("MCP_CLIENT", f"Erro inesperado em {name}: {e}")
-            return json.dumps({"error": f"Erro interno: {e}"})
+            return json.dumps({"error": f"Ferramenta '{name}' temporariamente indisponível."})
 
     def _dispatch(self, name: str, args: dict) -> Any:
+        """Roteia a chamada para o método correto da suap_api."""
         match name:
             case "get_my_data":
                 return self._client.comum.get_my_data().raw
@@ -191,7 +213,17 @@ class SUAPMCPClient:
             case "get_periods":
                 return [p.raw for p in self._client.edu.get_periods()]
             case "get_disciplines":
-                return [d.raw for d in self._client.edu.get_disciplines(args["semestre"])]
+                result = [d.raw for d in self._client.edu.get_disciplines(args["semestre"])]
+                # RF20: matrícula inativa — nenhuma disciplina no semestre informado
+                if not result:
+                    return {
+                        "aviso": (
+                            "Nenhuma disciplina encontrada para o semestre informado. "
+                            "O aluno pode não ter matrícula ativa neste período. "
+                            "Oriente-o a verificar períodos anteriores ou contatar a coordenação."
+                        )
+                    }
+                return result
             case "get_diaries":
                 return [d.raw for d in self._client.edu.get_diaries(args["semestre"])]
             case "get_diary_classes":

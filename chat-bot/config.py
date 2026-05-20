@@ -40,6 +40,10 @@ MAX_DAILY_MESSAGES = int(os.getenv("MAX_DAILY_MESSAGES", "25"))
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
+# --- HISTÓRICO DE CONVERSA ---
+# Número de pares (user + assistant) injetados no contexto do agente
+THREAD_HISTORY_PAIRS = int(os.getenv("THREAD_HISTORY_PAIRS", "3"))
+
 # --- FILA DE MENSAGENS ---
 # Tempo em minutos antes de uma mensagem 'processing' ser marcada como 'failed' (RN07)
 QUEUE_TIMEOUT_MINUTES = int(os.getenv("QUEUE_TIMEOUT_MINUTES", "5"))

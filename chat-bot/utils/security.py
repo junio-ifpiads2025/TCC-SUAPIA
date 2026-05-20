@@ -5,8 +5,8 @@ Garante que dados sensíveis (tokens, senhas, CPFs) nunca apareçam
 em logs de forma legível, substituindo os valores por '***'.
 """
 
-# Campos cujos valores devem ser ocultados nos logs
-_SENSITIVE_KEYS = {"token", "senha", "password", "cpf", "access", "refresh"}
+# Campos cujos valores devem ser ocultados nos logs (RN13)
+_SENSITIVE_KEYS = {"token", "senha", "password", "cpf", "access", "refresh", "authorization"}
 
 
 def sanitize_log(data: dict) -> dict:
