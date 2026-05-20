@@ -1,3 +1,14 @@
+"""
+Serviço de autenticação com o SUAP (Sistema Unificado de Administração Pública).
+
+Responsabilidades:
+- Gerar links de onboarding únicos (UUID) enviados ao usuário via WhatsApp.
+- Autenticar no SUAP com matrícula e senha via API REST.
+- Persistir o vínculo chat_id ↔ matrícula no PostgreSQL.
+- Armazenar o token de acesso no Redis (nunca no banco — RN01, RN03).
+- Encerrar sessões (logout).
+"""
+
 import uuid
 from dataclasses import dataclass
 
@@ -17,17 +28,35 @@ from config import APP_BASE_URL, SESSION_TTL_SECONDS, SUAP_BASE_URL
 
 @dataclass
 class LoginResult:
+    """Resultado de uma tentativa de autenticação no SUAP."""
     success: bool
-    message: str
+    message: str  # mensagem para exibir ao usuário (web ou WhatsApp)
 
 
 async def generate_onboarding_link(chat_id: str) -> str:
+    """
+    Gera um link de login único para o usuário iniciar a autenticação SUAP.
+
+    O UUID é armazenado no Redis com TTL de 15 minutos associado ao chat_id.
+    Ao acessar o link, o usuário informa matrícula e senha no navegador.
+    """
     link_uuid = str(uuid.uuid4())
     await set_onboarding_link(link_uuid, chat_id, ttl=900)
     return f"{APP_BASE_URL}/auth/login?token={link_uuid}"
 
 
 async def login_with_suap(chat_id: str, matricula: str, senha: str) -> LoginResult:
+    """
+    Autentica o usuário na API do SUAP e persiste o resultado.
+
+    Fluxo:
+    1. POST para /api/token/pair do SUAP com matrícula e senha.
+    2. Em caso de sucesso, salva/atualiza o registro em user_auth no PostgreSQL.
+    3. Armazena o token de acesso no Redis com o TTL retornado pelo SUAP.
+
+    Erros de rede ou status inesperado retornam LoginResult(success=False).
+    O token nunca é armazenado no banco de dados (RN01, RN03).
+    """
     suap_url = f"{SUAP_BASE_URL}/api/token/pair"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -53,13 +82,14 @@ async def login_with_suap(chat_id: str, matricula: str, senha: str) -> LoginResu
 
     data = resp.json()
     token = data.get("access")
+    # O SUAP retorna expires_in em segundos; usa SESSION_TTL_SECONDS como fallback
     ttl_seconds = int(data.get("expires_in", SESSION_TTL_SECONDS))
 
     if not token:
         logger.warn("AUTH", "Token ausente na resposta do SUAP")
         return LoginResult(success=False, message="Resposta inesperada do SUAP. Tente novamente.")
 
-    # Persiste vínculo no PostgreSQL — token nunca é armazenado aqui (RN01, RN03)
+    # Persiste o vínculo chat_id ↔ matrícula no PostgreSQL (upsert)
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(UserAuth).where(UserAuth.chat_id == chat_id))
         user = result.scalar_one_or_none()
@@ -70,17 +100,20 @@ async def login_with_suap(chat_id: str, matricula: str, senha: str) -> LoginResu
             session.add(user)
         await session.commit()
 
+    # Token vai apenas para o Redis — nunca para o banco (RN01, RN03)
     await set_token(chat_id, token, ttl_seconds=ttl_seconds)
     logger.success("AUTH", f"Login realizado — chat_id={chat_id} matricula={matricula}")
     return LoginResult(success=True, message="Login realizado com sucesso! Pode voltar ao WhatsApp.")
 
 
 async def logout(chat_id: str) -> None:
+    """Remove o token do Redis, encerrando a sessão do usuário."""
     await delete_token(chat_id)
     logger.info("AUTH", f"Sessão encerrada — chat_id={chat_id}")
 
 
 async def get_linked_matricula(chat_id: str) -> str | None:
+    """Retorna a matrícula vinculada ao chat_id, ou None se não houver registro."""
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(UserAuth).where(UserAuth.chat_id == chat_id))
         user = result.scalar_one_or_none()

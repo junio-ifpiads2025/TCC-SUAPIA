@@ -1,6 +1,6 @@
 # Plano — Épico 3: Pipeline e Fila de Mensagens
 
-> Requisitos cobertos: RF08, RF09, RF10, RF11, RF12 | Regras: RN05, RN06, RN07, RN08
+> Requisitos cobertos: RF08, RF09, RF10, RF11, RF12 | Regras: RN06, RN07, RN08
 
 **Depende de:** Épico 0 (tabela `message_queue`) e Épico 1 (sessão/auth)
 
@@ -26,17 +26,16 @@ Receber mensagens via webhook, validá-las, enfileirá-las no PostgreSQL e proce
 
 ## Passos
 
-### 3.1 — `routes/webhook.py` — Recepção (RF08, RF09, RN05)
+### 3.1 — `routes/webhook.py` — Recepção (RF08, RF09)
 
 ```python
 POST /webhook
 ```
 
-1. **Validação de origem (RN05):** verificar IP allowlist ou header `X-WAHA-Signature` antes de qualquer processamento.
-2. **Parse do payload (RF08):** extrair `chat_id` e `content` do JSON do WAHA.
-3. **Validação de estrutura (RF09):** se campos obrigatórios ausentes → HTTP 400 + log + retorna.
-4. Chamar `queue_service.enqueue(chat_id, content)`.
-5. Retornar HTTP 200 imediatamente (RNF01 — não bloquear o webhook).
+1. **Parse do payload (RF08):** extrair `chat_id` e `content` do JSON do WAHA.
+2. **Validação de estrutura (RF09):** se `body` presente mas `chat_id` ausente → HTTP 400 + log + retorna. Eventos sem `body` (acks, status, presence) são ignorados com 200.
+3. Chamar `queue_service.enqueue(chat_id, content)`.
+4. Retornar HTTP 200 imediatamente (RNF01 — não bloquear o webhook).
 
 Exemplo de payload WAHA esperado:
 ```json
@@ -65,9 +64,9 @@ Exemplo de payload WAHA esperado:
 - Marcar como `failed` com `error_detail='timeout'`.
 - Executar periodicamente (a cada 60s via `asyncio` lifespan task).
 
-### 3.3 — Worker assíncrono em `main.py`
+### 3.3 — Tasks de background em `main.py`
 
-No lifespan do FastAPI:
+As tasks ficam embutidas no próprio processo da aplicação, iniciadas no lifespan do FastAPI:
 ```python
 @asynccontextmanager
 async def lifespan(app):
@@ -76,7 +75,7 @@ async def lifespan(app):
     yield
 ```
 
-`queue_worker`: loop infinito com `await asyncio.sleep(1)` entre iterações.
+`queue_worker`: loop infinito com `await asyncio.sleep(1)` entre iterações. Não é um processo externo — roda na mesma instância do servidor.
 
 ### 3.4 — Índice e constraints da tabela
 
@@ -177,7 +176,7 @@ app.include_router(admin_router)
 
 **Notas:**
 - A tag `<meta http-equiv="refresh" content="10">` recarrega a página a cada 10 segundos, funcionando como um painel live sem JavaScript extra.
-- Em produção, remover ou proteger com middleware de Basic Auth ou restrição de IP (`X-Forwarded-For` / `request.client.host`).
+- Em produção, remover ou proteger com middleware de Basic Auth.
 
 ---
 
@@ -188,7 +187,6 @@ app.include_router(admin_router)
 - **RF10:** Não autenticado → onboarding; cota excedida → aviso; ok → enfileira.
 - **RF11:** Registro inserido com `status='pending'` e timestamp correto.
 - **RF12:** `completed` tem resposta; `failed` tem erro logado; nenhuma mensagem fica `processing` além do timeout.
-- **RN05:** Requests de IPs não autorizados são rejeitados com 403.
 - **RN06:** Após 25 mensagens no dia, novas mensagens retornam aviso; contador reseta meia-noite BRT.
 - **RN07:** Mensagens em `processing` há mais de `QUEUE_TIMEOUT_MINUTES` viram `failed`.
 - **RN08:** Dois `chat_id`s distintos são processados simultaneamente; mesmo `chat_id` respeitado em FIFO.

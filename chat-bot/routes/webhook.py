@@ -1,71 +1,68 @@
-from fastapi import APIRouter, BackgroundTasks, Request
+"""
+Endpoint de recepção de eventos do WAHA (WhatsApp HTTP API).
+
+O WAHA envia um POST para /webhook a cada evento da sessão WhatsApp
+(mensagens recebidas, ACKs, mudanças de presença, etc.).
+Este handler extrai apenas mensagens de texto recebidas pelo usuário
+e as encaminha para a fila de processamento.
+"""
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
 from services import logger
-from services.auth_service import generate_onboarding_link, logout
-from services.message_router import route
-from services.session_service import delete_token, increment_rate, is_authenticated
-from services.messaging_client import enviar_texto
-from config import AGENT_NAME, MAX_DAILY_MESSAGES, NUMEROS_PERMITIDOS, RESPONDER_QUALQUER_NUMERO
+from services.queue_service import enqueue
+from config import NUMEROS_PERMITIDOS, RESPONDER_QUALQUER_NUMERO
 
 router = APIRouter()
 
+# Eventos que o WAHA envia mas que não precisam de processamento.
+# Retornamos 200 para que o WAHA não fique reenviando.
+_IGNORED_EVENTS = {
+    "message.waiting_message",
+    "message.ack",
+    "message.revoked",
+    "session.status",
+    "presence.update",
+}
 
-# ── Background task ───────────────────────────────────────────────────────────
-
-async def _processar_mensagem(chat_id: str, body: str) -> None:
-    # RF04: /sair
-    if body.strip() == "/sair":
-        await delete_token(chat_id)
-        await logout(chat_id)
-        enviar_texto(
-            chat_id,
-            "Sessão encerrada. Na próxima mensagem você receberá o link de login.",
-        )
-        return
-
-    # RF01: autenticação obrigatória
-    if not await is_authenticated(chat_id):
-        link = await generate_onboarding_link(chat_id)
-        enviar_texto(
-            chat_id,
-            f"Olá! Para usar o {AGENT_NAME}, acesse o link abaixo para fazer login com sua conta SUAP "
-            f"(válido por 15 minutos):\n\n{link}",
-        )
-        return
-
-    # RN06: rate limit diário
-    count = await increment_rate(chat_id)
-    if count > MAX_DAILY_MESSAGES:
-        enviar_texto(
-            chat_id,
-            "Você atingiu o limite de 25 mensagens por dia. Tente novamente amanhã.",
-        )
-        return
-
-    logger.incoming(chat_id, body)
-    resposta, _ = await route(chat_id, body)
-    logger.response_log(resposta)
-    enviar_texto(chat_id, resposta)
-
-
-# ── Endpoint ──────────────────────────────────────────────────────────────────
 
 @router.post("/webhook")
-async def waha_webhook(request: Request, background_tasks: BackgroundTasks):
+async def waha_webhook(request: Request):
+    """
+    Recebe eventos do WAHA e enfileira mensagens de texto para processamento.
+
+    Fluxo:
+    1. Ignora eventos que não são mensagens (ACKs, status, etc.).
+    2. Valida presença de chat_id quando há body (RF09).
+    3. Filtra por número permitido se RESPONDER_QUALQUER_NUMERO=False.
+    4. Delega para queue_service.enqueue() e retorna 200 imediatamente (RF08, RNF01).
+    """
     data = await request.json()
 
-    if data.get("event") == "message.waiting_message":
+    event = data.get("event", "")
+
+    # Eventos sem relevância para o fluxo de mensagens
+    if event in _IGNORED_EVENTS:
         return {"status": "ignored"}
 
     payload = data.get("payload", {})
-    body = payload.get("body")
-    chat_id = payload.get("from")
-    is_from_me = payload.get("fromMe")
+    body_text = payload.get("body")       # texto enviado pelo usuário
+    chat_id = payload.get("from")         # identificador único do contato no WhatsApp
+    is_from_me = payload.get("fromMe")    # True quando a mensagem foi enviada pelo próprio bot
 
-    if body and not is_from_me:
+    # RF09: se há corpo de mensagem mas o remetente está ausente, o payload está malformado
+    if body_text and not chat_id:
+        logger.warn("WEBHOOK", f"Payload inválido — chat_id ausente (event={event})")
+        return JSONResponse(status_code=400, content={"detail": "chat_id ausente"})
+
+    if body_text and not is_from_me:
+        # Controle de acesso por número: só responde a números na allowlist
+        # (ou a qualquer número se RESPONDER_QUALQUER_NUMERO=True)
         if RESPONDER_QUALQUER_NUMERO or chat_id in NUMEROS_PERMITIDOS:
-            background_tasks.add_task(_processar_mensagem, chat_id, body)
+            await enqueue(chat_id, body_text)
         else:
             logger.warn("WEBHOOK", f"Número sem permissão: {chat_id}")
 
+    # Retorna imediatamente para não bloquear o WAHA (RNF01)
     return {"status": "ok"}

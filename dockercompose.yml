@@ -4,7 +4,7 @@ services:
     platform: linux/amd64
     environment:
       WHATSAPP_HOOK_URL: http://host.docker.internal:8002/webhook
-      WHATSAPP_DEFAULT_ENGINE: WEBJS
+      WHATSAPP_DEFAULT_ENGINE: NOWEB
       WHATSAPP_HOOK_EVENTS: message.any
       WAHA_DASHBOARD_NO_PASSWORD: true
       WHATSAPP_SWAGGER_NO_PASSWORD: true
@@ -35,6 +35,9 @@ services:
     image: redis:7-alpine
     container_name: redis_suapia
     restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    environment:
+      REDIS_PASSWORD: 'suapiaRedis2025' # Substitua pela sua senha real
     ports:
       - "6379:6379"
     volumes:
