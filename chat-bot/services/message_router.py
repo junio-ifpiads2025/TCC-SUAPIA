@@ -18,7 +18,7 @@ import asyncio
 from services import logger
 from services import thread_service
 from services.session_service import get_token
-from config import FALLBACK_TEXT, MENU_TEXT, UNKNOWN_COMMAND_TEXT
+from config import ABOUT_TEXT, FALLBACK_TEXT, MENU_TEXT, UNKNOWN_COMMAND_TEXT
 
 
 async def route(chat_id: str, message: str) -> tuple[str, list[dict]]:
@@ -30,9 +30,12 @@ async def route(chat_id: str, message: str) -> tuple[str, list[dict]]:
     """
     body = message.strip()
 
-    # Comando de menu: resposta estática, não aciona o agente nem salva histórico
+    # Comandos estáticos: não acionam o agente nem salvam histórico
     if body == "/menu":
         return MENU_TEXT, []
+
+    if body == "/about":
+        return ABOUT_TEXT, []
 
     # Qualquer outro comando desconhecido (RN04)
     if body.startswith("/"):

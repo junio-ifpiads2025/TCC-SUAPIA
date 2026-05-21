@@ -57,6 +57,7 @@ NUMEROS_PERMITIDOS = [num.strip() for num in _numeros_str.split(",") if num.stri
 
 # --- IDENTIDADE DO AGENTE ---
 AGENT_NAME = os.getenv("AGENT_NAME", "SUAP-IA")
+AGENT_VERSION = os.getenv("AGENT_VERSION", "0.1.0")
 
 # --- UX / MENSAGENS ESTÁTICAS (RF05, RF07, RN04) ---
 
@@ -71,10 +72,22 @@ Basta digitar sua pergunta diretamente! Por exemplo:
 
 Comandos disponíveis:
 /menu — exibir este menu
+/about — informações sobre o agente
 /sair — encerrar sessão"""
+
+ABOUT_TEXT = f"""{AGENT_NAME} — versão {AGENT_VERSION}
+
+Assistente virtual desenvolvido para o IFPI, integrado ao SUAP.
+
+Capacidades:
+- Consulta de dados acadêmicos (notas, faltas, disciplinas)
+- Busca nos manuais institucionais do SUAP
+- Autenticação segura via conta SUAP
+
+Desenvolvido como Trabalho de Conclusão de Curso (TCC) — IFPI."""
 
 # Resposta genérica para falhas inesperadas do agente
 FALLBACK_TEXT = "Desculpe, ocorreu uma instabilidade. Tente novamente em alguns instantes."
 
 # Resposta para comandos não reconhecidos (RN04)
-UNKNOWN_COMMAND_TEXT = "Comando não reconhecido. Comandos disponíveis: /menu, /sair"
+UNKNOWN_COMMAND_TEXT = "Comando não reconhecido. Comandos disponíveis: /menu, /about, /sair"
