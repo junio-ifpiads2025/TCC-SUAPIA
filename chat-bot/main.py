@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from models.database import init_db
 from routes.admin import router as admin_router
 from routes.auth import router as auth_router
+from routes.terms import router as terms_router
 from routes.webhook import router as webhook_router
 from services import logger
 from services import queue_service
@@ -70,4 +71,5 @@ app = FastAPI(title=f"{AGENT_NAME} WhatsApp Bot", lifespan=lifespan)
 # Registro dos routers
 app.include_router(webhook_router)   # POST /webhook
 app.include_router(auth_router)      # GET/POST /auth/login
+app.include_router(terms_router)     # GET /terms, GET /terms/view
 app.include_router(admin_router)     # GET /admin/queue

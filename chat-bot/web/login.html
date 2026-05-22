@@ -14,6 +14,7 @@
       justify-content: center;
       background: #f0f4f8;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 1.5rem 1rem;
     }
 
     .card {
@@ -23,6 +24,11 @@
       padding: 2.5rem 2rem;
       width: 100%;
       max-width: 400px;
+    }
+
+    @media (max-width: 420px) {
+      .card { padding: 2rem 1.25rem; border-radius: 8px; }
+      .logo h1 { font-size: 1.4rem; }
     }
 
     .logo { text-align: center; margin-bottom: 1.5rem; }
@@ -62,6 +68,38 @@
     button[type="submit"]:hover { background: #1e40af; }
     button[type="submit"]:disabled { background: #93c5fd; cursor: not-allowed; }
 
+    .terms-row {
+      display: flex;
+      align-items: flex-start;
+      gap: .55rem;
+      margin-bottom: 1.25rem;
+    }
+    .terms-row input[type="checkbox"] {
+      width: 1rem;
+      height: 1rem;
+      margin-top: .2rem;
+      accent-color: #1a56db;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .terms-row label {
+      font-size: .83rem;
+      font-weight: 400;
+      color: #374151;
+      margin-bottom: 0;
+      cursor: pointer;
+      line-height: 1.4;
+    }
+    .terms-row a {
+      color: #1a56db;
+      text-decoration: underline;
+    }
+    .terms-row a:hover { color: #1e40af; }
+    .field-error.terms-error {
+      margin-top: -.5rem;
+      margin-bottom: .75rem;
+    }
+
     .notice {
       margin-top: 1.25rem;
       font-size: .8rem;
@@ -86,6 +124,16 @@
       <input type="password" id="senha" name="senha" autocomplete="current-password" />
       <div class="field-error" id="err-senha"></div>
 
+      <div class="terms-row">
+        <input type="checkbox" id="terms_accepted" name="terms_accepted" value="true" />
+        <label for="terms_accepted">
+          Li e aceito o
+          <a href="/terms/view" target="_blank" rel="noopener noreferrer">Termo de Compromisso de Uso do Projeto SUAPIA</a>
+          e autorizo o tratamento dos meus dados pelo agente Sidi conforme a LGPD.
+        </label>
+      </div>
+      <div class="field-error terms-error" id="err-terms"></div>
+
       <button type="submit" id="btn-submit">Entrar</button>
     </form>
 
@@ -100,13 +148,16 @@
 
       const matricula = document.getElementById('matricula');
       const senha = document.getElementById('senha');
+      const terms = document.getElementById('terms_accepted');
       const errMat = document.getElementById('err-matricula');
       const errSen = document.getElementById('err-senha');
+      const errTerms = document.getElementById('err-terms');
 
       matricula.classList.remove('error');
       senha.classList.remove('error');
       errMat.textContent = '';
       errSen.textContent = '';
+      errTerms.textContent = '';
 
       if (!matricula.value.trim()) {
         matricula.classList.add('error');
@@ -117,6 +168,11 @@
       if (!senha.value) {
         senha.classList.add('error');
         errSen.textContent = 'Informe a senha.';
+        valid = false;
+      }
+
+      if (!terms.checked) {
+        errTerms.textContent = 'Você precisa aceitar o Termo de Uso para continuar.';
         valid = false;
       }
 

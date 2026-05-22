@@ -90,15 +90,17 @@ async def login_submit(
     token: str = Query(...),
     matricula: str = Form(...),
     senha: str = Form(...),
+    terms_accepted: str | None = Form(default=None),
 ):
     """
     Processa as credenciais enviadas pelo formulário.
 
     Fluxo em caso de sucesso:
       1. Valida o token de onboarding (ainda pode ter expirado entre GET e POST).
-      2. Autentica no SUAP e armazena o token no Redis.
-      3. Invalida o link de onboarding (uso único).
-      4. Notifica o usuário no WhatsApp em background (não bloqueia a resposta HTTP).
+      2. Verifica que o usuário aceitou o Termo de Uso.
+      3. Autentica no SUAP e armazena o token no Redis.
+      4. Invalida o link de onboarding (uso único).
+      5. Notifica o usuário no WhatsApp em background (não bloqueia a resposta HTTP).
 
     Em caso de falha, retorna 401 e envia aviso pelo WhatsApp.
     """
@@ -109,7 +111,17 @@ async def login_submit(
             status_code=400,
         )
 
-    result = await login_with_suap(chat_id, matricula, senha)
+    if not terms_accepted:
+        return HTMLResponse(
+            _result_page(
+                "Aceite obrigatório",
+                "Você precisa aceitar o Termo de Compromisso de Uso para prosseguir.",
+                success=False,
+            ),
+            status_code=422,
+        )
+
+    result = await login_with_suap(chat_id, matricula, senha, terms_accepted=True)
 
     if result.success:
         # Invalida o token imediatamente para evitar reuso

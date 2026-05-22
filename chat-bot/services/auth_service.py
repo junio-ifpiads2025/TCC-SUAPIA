@@ -11,6 +11,7 @@ Responsabilidades:
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import select
@@ -47,7 +48,12 @@ async def generate_onboarding_link(chat_id: str) -> str:
     return f"{APP_BASE_URL}/auth/login?token={link_uuid}"
 
 
-async def login_with_suap(chat_id: str, matricula: str, senha: str) -> LoginResult:
+async def login_with_suap(
+    chat_id: str,
+    matricula: str,
+    senha: str,
+    terms_accepted: bool = False,
+) -> LoginResult:
     """
     Autentica o usuário na API do SUAP e persiste o resultado.
 
@@ -92,13 +98,16 @@ async def login_with_suap(chat_id: str, matricula: str, senha: str) -> LoginResu
         return LoginResult(success=False, message="Resposta inesperada do SUAP. Tente novamente.")
 
     # Persiste o vínculo chat_id ↔ matrícula no PostgreSQL (upsert)
+    accepted_at = datetime.now(timezone.utc) if terms_accepted else None
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(UserAuth).where(UserAuth.chat_id == chat_id))
         user = result.scalar_one_or_none()
         if user:
             user.matricula = matricula
+            if accepted_at:
+                user.terms_accepted_at = accepted_at
         else:
-            user = UserAuth(chat_id=chat_id, matricula=matricula)
+            user = UserAuth(chat_id=chat_id, matricula=matricula, terms_accepted_at=accepted_at)
             session.add(user)
         await session.commit()
 

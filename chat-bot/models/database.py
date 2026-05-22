@@ -10,7 +10,7 @@ Tabelas gerenciadas aqui:
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import String, DateTime, Text, Index
+from sqlalchemy import String, DateTime, Text, Index, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
@@ -35,12 +35,18 @@ class UserAuth(Base):
     com TTL controlado (RN01, RN03). Esta tabela serve para:
     - Associar matrícula ao chat_id após login bem-sucedido.
     - Permitir auditoria de quem usou o sistema.
+    - Registrar a data/hora do aceite do Termo de Uso (exigência LGPD Art. 8º §5º).
     """
     __tablename__ = "user_auth"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     chat_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     matricula: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Registra quando o usuário aceitou o Termo de Uso (LGPD Art. 8º §5º)
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -93,3 +99,9 @@ async def init_db() -> None:
     """Cria todas as tabelas no banco se ainda não existirem (idempotente)."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Migração manual: adiciona colunas novas a tabelas já existentes.
+        # IF NOT EXISTS garante idempotência — seguro rodar a qualquer subida.
+        await conn.execute(text(
+            "ALTER TABLE user_auth "
+            "ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ"
+        ))
