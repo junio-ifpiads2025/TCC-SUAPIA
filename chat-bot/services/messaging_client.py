@@ -16,6 +16,9 @@ e atualize os imports abaixo.
 """
 
 from services.waha_client import (
+    marcar_lida_waha as marcar_lida,          # marcar_lida(chat_id, message_id=None)
+    marcar_lida_waha_async as marcar_lida_async,  # marcar_lida_async(chat_id, message_id=None)
+    iniciar_digitacao_waha_async as iniciar_digitacao_async,
     enviar_mensagem_waha as enviar_texto,
     enviar_imagem_waha as enviar_imagem,
     enviar_mensagem_waha_async as enviar_texto_async,

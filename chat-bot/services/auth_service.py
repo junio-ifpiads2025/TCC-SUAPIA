@@ -22,6 +22,7 @@ from services.session_service import (
     delete_token,
     set_onboarding_link,
     set_token,
+    set_profile,
 )
 from config import APP_BASE_URL, SESSION_TTL_SECONDS, SUAP_BASE_URL
 
@@ -31,6 +32,7 @@ class LoginResult:
     """Resultado de uma tentativa de autenticação no SUAP."""
     success: bool
     message: str  # mensagem para exibir ao usuário (web ou WhatsApp)
+    nome: str | None = None  # primeiro nome do usuário, preenchido após login bem-sucedido
 
 
 async def generate_onboarding_link(chat_id: str) -> str:
@@ -102,8 +104,11 @@ async def login_with_suap(chat_id: str, matricula: str, senha: str) -> LoginResu
 
     # Token vai apenas para o Redis — nunca para o banco (RN01, RN03)
     await set_token(chat_id, token, ttl_seconds=ttl_seconds)
+
+    nome = await _fetch_and_save_profile(chat_id, token, ttl_seconds)
+
     logger.success("AUTH", f"Login realizado — chat_id={chat_id} matricula={matricula}")
-    return LoginResult(success=True, message="Login realizado com sucesso! Pode voltar ao WhatsApp.")
+    return LoginResult(success=True, message="Login realizado com sucesso! Pode voltar ao WhatsApp.", nome=nome)
 
 
 async def logout(chat_id: str) -> None:
@@ -118,3 +123,19 @@ async def get_linked_matricula(chat_id: str) -> str | None:
         result = await session.execute(select(UserAuth).where(UserAuth.chat_id == chat_id))
         user = result.scalar_one_or_none()
         return user.matricula if user else None
+
+
+async def _fetch_and_save_profile(chat_id: str, token: str, ttl: int) -> str | None:
+    """Busca nome e curso do usuário no SUAP e salva no Redis. Retorna o nome_usual."""
+    try:
+        from suap_api import SuapClient
+        client = SuapClient(SUAP_BASE_URL, token=token)
+        dados = client.comum.get_my_data()
+        nome = dados.nome_usual or "Aluno"
+        curso = dados.vinculo.curso if dados.vinculo else None
+        await set_profile(chat_id, nome, curso, ttl)
+        logger.success("AUTH", f"Perfil salvo — {nome} | curso={curso}")
+        return nome
+    except Exception as e:
+        logger.error("AUTH", f"Falha ao buscar perfil SUAP: {e}")
+        return None

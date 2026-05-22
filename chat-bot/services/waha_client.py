@@ -48,12 +48,24 @@ def _headers() -> dict:
     return {}
 
 
-# ── Sync (usado em webhook.py) ────────────────────────────────────────────────
+# ── Sync ─────────────────────────────────────────────────────────────────────
+
+def marcar_lida_waha(chat_id: str, message_id: str | None = None) -> None:
+    """Marca a mensagem como lida (sendSeen). Deve ser chamado imediatamente ao receber a mensagem."""
+    try:
+        payload = _session(chat_id)
+        if message_id:
+            payload["messageId"] = message_id
+        resp = requests.post(f"{WAHA_BASE_URL}/api/sendSeen", json=payload, headers=_headers(), timeout=5)
+        if resp.status_code != 200:
+            logger.error("WAHA", f"sendSeen falhou: {resp.status_code} — {resp.text}")
+    except Exception as e:
+        logger.error("WAHA", f"Erro ao marcar lida: {e}")
+
 
 def enviar_mensagem_waha(chat_id: str, texto: str):
     hdrs = _headers()
     try:
-        requests.post(f"{WAHA_BASE_URL}/api/sendSeen", json=_session(chat_id), headers=hdrs, timeout=5)
         requests.post(f"{WAHA_BASE_URL}/api/startTyping", json=_session(chat_id), headers=hdrs, timeout=5)
         time.sleep(_typing_delay(texto))
         requests.post(f"{WAHA_BASE_URL}/api/stopTyping", json=_session(chat_id), headers=hdrs, timeout=5)
@@ -82,12 +94,34 @@ def enviar_imagem_waha(chat_id: str, image_url: str):
         return None
 
 
-# ── Async (usado em auth.py via BackgroundTasks) ──────────────────────────────
+# ── Async ─────────────────────────────────────────────────────────────────────
+
+async def marcar_lida_waha_async(chat_id: str, message_id: str | None = None) -> None:
+    """Marca a mensagem como lida (sendSeen). Deve ser chamado imediatamente ao receber a mensagem."""
+    try:
+        payload = _session(chat_id)
+        if message_id:
+            payload["messageId"] = message_id
+        async with httpx.AsyncClient(timeout=5.0, headers=_headers()) as client:
+            resp = await client.post(f"{WAHA_BASE_URL}/api/sendSeen", json=payload)
+        if resp.status_code != 200:
+            logger.error("WAHA", f"sendSeen falhou: {resp.status_code} — {resp.text}")
+    except Exception as e:
+        logger.error("WAHA", f"Erro ao marcar lida: {e}")
+
+
+async def iniciar_digitacao_waha_async(chat_id: str) -> None:
+    """Aciona o indicador 'digitando...' durante o processamento do LLM."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0, headers=_headers()) as client:
+            await client.post(f"{WAHA_BASE_URL}/api/startTyping", json=_session(chat_id))
+    except Exception as e:
+        logger.error("WAHA", f"Erro ao iniciar digitação: {e}")
+
 
 async def enviar_mensagem_waha_async(chat_id: str, texto: str):
     try:
         async with httpx.AsyncClient(timeout=10.0, headers=_headers()) as client:
-            await client.post(f"{WAHA_BASE_URL}/api/sendSeen", json=_session(chat_id))
             await client.post(f"{WAHA_BASE_URL}/api/startTyping", json=_session(chat_id))
             await asyncio.sleep(_typing_delay(texto))
             await client.post(f"{WAHA_BASE_URL}/api/stopTyping", json=_session(chat_id))

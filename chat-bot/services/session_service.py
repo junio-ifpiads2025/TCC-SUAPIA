@@ -11,6 +11,7 @@ Responsabilidades:
 - Link de onboarding: UUID temporário (15min) que associa token ao chat_id.
 """
 
+import json
 from datetime import datetime, timezone, timedelta
 
 import redis.asyncio as aioredis
@@ -121,3 +122,26 @@ async def get_onboarding_link(uuid_str: str) -> str | None:
 async def delete_onboarding_link(uuid_str: str) -> None:
     """Invalida o link de onboarding após uso para evitar reuso do mesmo link."""
     await get_redis().delete(_onboarding_key(uuid_str))
+
+
+# ── Perfil do usuário (nome + curso) ─────────────────────────────────────────
+
+def _profile_key(chat_id: str) -> str:
+    return f"suap:profile:{chat_id}"
+
+
+async def set_profile(chat_id: str, nome: str, curso: str | None, ttl: int) -> None:
+    """Salva nome e curso do usuário no Redis com o mesmo TTL do token."""
+    data = json.dumps({"nome": nome, "curso": curso}, ensure_ascii=False)
+    await get_redis().setex(_profile_key(chat_id), ttl, data)
+
+
+async def get_profile(chat_id: str) -> dict | None:
+    """Retorna dict com 'nome' e 'curso', ou None se não houver perfil salvo."""
+    raw = await get_redis().get(_profile_key(chat_id))
+    return json.loads(raw) if raw else None
+
+
+async def delete_profile(chat_id: str) -> None:
+    """Remove o perfil do Redis junto com o logout."""
+    await get_redis().delete(_profile_key(chat_id))

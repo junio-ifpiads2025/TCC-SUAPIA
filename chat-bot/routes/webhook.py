@@ -49,6 +49,7 @@ async def waha_webhook(request: Request):
     payload = data.get("payload", {})
     body_text = payload.get("body")       # texto enviado pelo usuário
     chat_id = payload.get("from")         # identificador único do contato no WhatsApp
+    message_id = payload.get("id")        # ID da mensagem (necessário para sendSeen)
     is_from_me = payload.get("fromMe")    # True quando a mensagem foi enviada pelo próprio bot
 
     # RF09: se há corpo de mensagem mas o remetente está ausente, o payload está malformado
@@ -60,7 +61,7 @@ async def waha_webhook(request: Request):
         # Controle de acesso por número: só responde a números na allowlist
         # (ou a qualquer número se RESPONDER_QUALQUER_NUMERO=True)
         if RESPONDER_QUALQUER_NUMERO or chat_id in NUMEROS_PERMITIDOS:
-            await enqueue(chat_id, body_text)
+            await enqueue(chat_id, body_text, message_id)
         else:
             logger.warn("WEBHOOK", f"Número sem permissão: {chat_id}")
 

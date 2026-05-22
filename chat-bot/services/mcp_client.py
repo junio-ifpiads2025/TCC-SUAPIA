@@ -69,17 +69,37 @@ _TOOL_SCHEMAS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "get_diaries",
-            "description": "Lista os diários de classe de um semestre (disciplinas, professores e ID do diário para chamadas subsequentes).",
+            "name": "get_my_vinculo",
+            "description": "Retorna o vínculo institucional do usuário autenticado: indica se é Aluno e/ou Servidor (professor). Use antes de get_my_diaries para verificar se o usuário tem perfil de professor.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_all_disciplines",
+            "description": "Retorna todas as disciplinas cursadas pelo aluno em todos os semestres sem precisar informar um semestre específico. Prefira quando o usuário quiser histórico completo ou perguntar sobre uma disciplina sem especificar o período.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_my_diaries",
+            "description": "Lista os diários do professor autenticado em um ano e período letivo. Exclusivo para Servidores (professores). Retorna erro se o usuário for Aluno. Use get_my_vinculo() para verificar o vínculo antes de chamar esta ferramenta.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "semestre": {
-                        "type": "string",
-                        "description": "Semestre no formato 'YYYY.N'. Exemplo: '2024.1'.",
-                    }
+                    "ano_letivo": {
+                        "type": "integer",
+                        "description": "Ano letivo. Exemplo: 2024.",
+                    },
+                    "periodo_letivo": {
+                        "type": "integer",
+                        "description": "Período letivo numérico (1 ou 2).",
+                    },
                 },
-                "required": ["semestre"],
+                "required": ["ano_letivo", "periodo_letivo"],
             },
         },
     },
@@ -224,8 +244,16 @@ class SUAPMCPClient:
                         )
                     }
                 return result
-            case "get_diaries":
-                return [d.raw for d in self._client.edu.get_diaries(args["semestre"])]
+            case "get_my_vinculo":
+                tipo_vinculo = self._client.comum.get_person_links()
+                return {"tipo_vinculo": tipo_vinculo}
+            case "get_all_disciplines":
+                return [d.raw for d in self._client.edu.get_all_disciplines()]
+            case "get_my_diaries":
+                tipo_vinculo = self._client.comum.get_person_links()
+                if tipo_vinculo != "Servidor":
+                    return {"erro": "Acesso negado", "detalhe": "Este endpoint é exclusivo para Servidores (professores)."}
+                return [d.raw for d in self._client.edu.get_my_diaries(args["ano_letivo"], args["periodo_letivo"])]
             case "get_diary_classes":
                 return [c.raw for c in self._client.edu.get_diary_classes(args["id_diario"])]
             case "get_diary_professors":

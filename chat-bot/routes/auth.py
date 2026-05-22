@@ -116,12 +116,14 @@ async def login_submit(
         await delete_onboarding_link(token)
         logger.success("AUTH_WEB", f"Login via web concluído — chat_id={chat_id}")
 
-        # Notificações enviadas em background para não atrasar a resposta HTML
-        background_tasks.add_task(
-            enviar_texto_async,
-            chat_id,
-            "✅ Login realizado com sucesso! Agora você já pode enviar suas perguntas sobre o SUAP aqui no WhatsApp.",
+        primeiro_nome = result.nome.split()[0] if result.nome else "aluno"
+        saudacao = (
+            f"✅ Login realizado com sucesso!\n\n"
+            f"Olá, {primeiro_nome}! Bem-vindo ao {AGENT_NAME}. "
+            f"Agora você já pode enviar suas perguntas sobre o SUAP aqui no WhatsApp."
         )
+        # Notificações enviadas em background para não atrasar a resposta HTML
+        background_tasks.add_task(enviar_texto_async, chat_id, saudacao)
         background_tasks.add_task(enviar_texto_async, chat_id, MENU_TEXT)
         return HTMLResponse(
             _result_page("Login realizado!", result.message, success=True)

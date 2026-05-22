@@ -24,12 +24,12 @@ from models.database import AsyncSessionLocal, MessageQueue
 from services import logger
 from services.auth_service import generate_onboarding_link, logout
 from services.message_router import route
-from services.messaging_client import enviar_texto_async
-from services.session_service import delete_token, increment_rate, is_authenticated
+from services.messaging_client import enviar_texto_async, marcar_lida_async, iniciar_digitacao_async
+from services.session_service import delete_token, increment_rate, is_authenticated, get_profile, delete_profile
 from services import thread_service
 
 
-async def enqueue(chat_id: str, content: str) -> None:
+async def enqueue(chat_id: str, content: str, message_id: str | None = None) -> None:
     """
     Ponto de entrada para toda mensagem recebida do webhook.
 
@@ -39,10 +39,14 @@ async def enqueue(chat_id: str, content: str) -> None:
       3. Rate limit diário (RN06) — se cota esgotada, envia aviso.
       4. Insere na fila com status='pending' (RF11).
     """
+    # Marca como lida imediatamente ao receber — antes de qualquer processamento (WAHA anti-ban)
+    await marcar_lida_async(chat_id, message_id)
+
     # /sair é tratado aqui e não entra na fila, pois não precisa do agente
     if content.strip() == "/sair":
         await delete_token(chat_id)
         await logout(chat_id)
+        await delete_profile(chat_id)
         await thread_service.clear_thread(chat_id)  # apaga histórico junto com a sessão
         await enviar_texto_async(
             chat_id,
@@ -103,7 +107,14 @@ async def _process_message(msg_id: int, chat_id: str, content: str) -> None:
 
     try:
         logger.incoming(chat_id, content)
+        await iniciar_digitacao_async(chat_id)  # mostra "digitando..." durante o processamento do LLM
         resposta, _ = await route(chat_id, content)
+
+        profile = await get_profile(chat_id)
+        if profile and profile.get("nome"):
+            primeiro_nome = profile["nome"].split()[0]
+            resposta = f"{primeiro_nome}, {resposta}"
+
         logger.response_log(resposta)
         await enviar_texto_async(chat_id, resposta)
         status, error_detail = "completed", None
