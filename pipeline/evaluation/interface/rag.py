@@ -6,33 +6,13 @@ from typing import List
 # Ajusta o path para importar os serviços do bot
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'chat-bot')))
 
-# Seleção do pipeline de acordo com a variável de ambiente
-_use_crag = os.getenv("USE_CRAG", "false").lower() in ("true", "1", "t")
-_use_advanced = os.getenv("USE_ADVANCED_RAG", "false").lower() in ("true", "1", "t")
+from services.rag_agent import gerar_resposta
+from services.rag_agent import gerar_resposta_com_contexto
 
-if _use_crag:
-    from services.advanced_rag_agent import gerar_resposta_crag as gerar_resposta
-    from services.advanced_rag_agent import get_pipeline_crag
 
-    def _executar_com_contexto(pergunta: str):
-        """Executa o pipeline CRAG uma única vez e retorna (answer, context, metadata)."""
-        return get_pipeline_crag().invoke(pergunta)
-
-elif _use_advanced:
-    from services.advanced_rag_agent import gerar_resposta_avancada as gerar_resposta
-    from services.advanced_rag_agent import get_pipeline_avancado
-
-    def _executar_com_contexto(pergunta: str):
-        """Executa o pipeline Advanced RAG uma única vez e retorna (answer, context, metadata)."""
-        return get_pipeline_avancado().invoke(pergunta)
-
-else:
-    from services.rag_agent import gerar_resposta
-    from services.rag_agent import gerar_resposta_com_contexto
-
-    def _executar_com_contexto(pergunta: str):
-        """Executa o RAG simples uma única vez e retorna (answer, context, metadata)."""
-        return gerar_resposta_com_contexto(pergunta)
+def _executar_com_contexto(pergunta: str):
+    """Executa o RAG simples uma única vez e retorna (answer, context, metadata)."""
+    return gerar_resposta_com_contexto(pergunta)
 
 
 # ==========================================
@@ -66,12 +46,7 @@ class RagasDataset:
 # ==========================================
 def gerar_dados_para_avaliacao(qa_dados: list) -> dict:
     """Passa as perguntas pelo pipeline RAG ativo e estrutura os dados para o Ragas."""
-    if _use_crag:
-        pipeline_nome = "CRAG"
-    elif _use_advanced:
-        pipeline_nome = "Advanced RAG"
-    else:
-        pipeline_nome = "RAG Simples"
+    pipeline_nome = "RAG Simples"
     dataset_ragas = RagasDataset()
 
     print(f"⏳ Processando {len(qa_dados)} perguntas [{pipeline_nome}]...\n")

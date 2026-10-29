@@ -1,30 +1,45 @@
-# 📖 API de Extração de Manuais (SUAP)
+# 📖 CLI de Extração de Manuais (SUAP)
 
-Este projeto é uma API desenvolvida em **FastAPI** concebida para fazer o download e a extração estruturada de dados de manuais online do SUAP (em formato HTML). 
+CLI que baixa o export HTML (BookStack) dos manuais do SUAP e gera **um arquivo `.md` por página**, pronto para RAG.
 
-A aplicação recebe um lote de URLs, descarrega o conteúdo de forma assíncrona e utiliza um *parser* inteligente para extrair o título do manual, os tópicos, o texto formatado e os links de imagens, devolvendo tudo num ficheiro JSON estruturado.
+## Saída
 
-## 🚀 Tecnologias Utilizadas
+```
+output/<AAAAMMDD_HHMMSS>/<manual>/[<capitulo>/]<pagina>.md
+```
 
-* **[FastAPI](https://fastapi.tiangolo.com/):** Framework web rápido para a construção da API.
-* **[HTTPX](https://www.python-httpx.org/):** Cliente HTTP assíncrono para o download das páginas.
-* **[BeautifulSoup4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/):** Biblioteca para extração e *parsing* do HTML.
-* **[Pydantic](https://docs.pydantic.dev/):** Para validação de dados e estruturação dos esquemas (JSON).
+Cada `.md` tem front matter YAML (`manual`, `capitulo`, `titulo`, `breadcrumb`, `url_origem`, `hash_conteudo`, `n_imagens`, `extraido_em`) seguido do conteúdo em Markdown (listas, tabelas, passos em negrito, avisos como `> Informação: ...`, imagens inline `![..](url)`).
 
-## 📁 Estrutura do Projeto
+Regras:
+* Páginas com corpo < 50 caracteres e sem imagem são descartadas.
+* Conteúdo repetido (mesmo `hash_conteudo`, ex.: "SUAP Edu" x "Projeto de Ensino") é gravado uma única vez.
+* Sem estrutura reconhecida, a página inteira vira um único arquivo (com warning no log).
+* Cada execução grava numa pasta nova com data/hora; execuções anteriores não são tocadas.
 
-* `app/main.py`: Ponto de entrada da aplicação FastAPI.
-* `app/urls/url.py`: Definição das rotas (endpoints).
-* `app/controllers/controller.py`: Lógica de orquestração e processamento assíncrono em lote.
-* `app/services/service.py`: Lógica pesada de download (HTTP) e *parsing* do HTML (BeautifulSoup).
-* `app/schemas/schema.py`: Modelos de dados para as requisições e respostas.
+## Estrutura
 
----
+* `cli.py` / `__main__.py`: entrada da CLI (argparse).
+* `app/controllers/controller.py`: orquestração assíncrona, dedup e gravação dos `.md`.
+* `app/services/service.py`: download (httpx), parsing (BeautifulSoup) e conversão (markdownify).
+* `app/schemas/schema.py`: modelos Pydantic.
 
-## 🛠️ Como Instalar e Configurar
+## Instalação
 
-**1. Clone o repositório ou navegue até à pasta do projeto:**
 ```bash
-cd seu_projeto
+pip install -r pipeline/manualsExtraction/requirements.txt
+```
 
-uvicorn app.main:app --reload --port 8000
+## Uso (a partir da raiz do repositório)
+
+```bash
+# Lista de URLs de export -> output/<data_hora>/<manual>/...
+python -m pipeline.manualsExtraction lote URL [URL ...]
+
+# links.json agrupado por nome (dedup vale entre todos os manuais)
+python -m pipeline.manualsExtraction links-json links.json
+
+# Diretório de saída customizado
+python -m pipeline.manualsExtraction -o ./saida links-json links.json
+```
+
+Código de saída: `0` tudo ok, `1` alguma URL falhou, `2` erro ao ler o `links.json`.

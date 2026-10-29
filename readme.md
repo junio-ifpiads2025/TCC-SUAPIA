@@ -4,23 +4,26 @@ Sistema de Inteligência Artificial baseado em **RAG (Retrieval-Augmented Genera
 
 ## Visão Geral da Arquitetura
 
-O projeto é dividido em microsserviços independentes construídos com **FastAPI** e serviços de infraestrutura em **Docker**:
+O projeto é dividido em pipelines de dados em **CLI** (extração, ingestão, geração de Q&A e avaliação), um chatbot em **FastAPI** e serviços de infraestrutura em **Docker**:
 
 ```
 TCC-SUAPIA/
-├── dockercompose.yml          # Infraestrutura Docker (WAHA)
-├── links.json                 # URLs dos manuais do SUAP
-├── manualsExtraction/         # Serviço de extração de HTML (porta 8000)
-├── manualsIngestion-RAG/      # Serviço de vetorização e ingestão (porta 8001)
+├── Makefile                   # Atalhos para todas as pipelines (make help)
+├── dockercompose.yml          # Infraestrutura Docker (WAHA + pgvector)
+├── pipeline/manualsExtraction/links.json  # URLs dos manuais do SUAP
 ├── chat-bot/                  # Webhook RAG para WhatsApp (porta 8002)
-└── q&a-generator/             # Gerador de datasets sintéticos para avaliação
+└── pipeline/
+    ├── manualsExtraction/     # CLI de extração de HTML -> .md
+    ├── manualsIngestion-RAG/  # CLI de vetorização e ingestão (.md -> pgvector)
+    ├── q&a-generator/         # Gerador de datasets sintéticos para avaliação
+    └── evaluation/            # Avaliação do RAG (RAGAS)
 ```
 
 ### Fluxo de Dados
 
 **Pipeline de Ingestão:**
 ```
-links.json → manualsExtraction (porta 8000) → manualsIngestion-RAG (porta 8001) → PostgreSQL pgvector
+links.json → manualsExtraction (CLI, gera .md) → manualsIngestion-RAG (CLI) → PostgreSQL pgvector
 ```
 
 **Pipeline de Resposta:**
@@ -60,32 +63,40 @@ docker compose up -d
 
 ---
 
-## 2. Extração dos Manuais (`manualsExtraction`)
+## 2. Extração dos Manuais (`pipeline/manualsExtraction`)
 
-Faz o download e o parsing inteligente do HTML dos manuais do SUAP, extraindo tópicos, textos e links de imagens.
+CLI que baixa o export HTML dos manuais do SUAP e gera **um `.md` por página** em `pipeline/manualsExtraction/output/<data_hora>/<manual>/...`.
 
-Veja o [README do manualsExtraction](./manualsExtraction/README.md) para instruções detalhadas.
+Veja o [README do manualsExtraction](./pipeline/manualsExtraction/readme.md).
 
-**Execução rápida:**
 ```bash
-cd manualsExtraction
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+make install-extraction
+make extract-links                       # usa links.json (ou LINKS_JSON=outro.json)
+make extract URLS='https://... https://...'
+
+# sem Makefile (a partir da raiz)
+python -m pipeline.manualsExtraction links-json pipeline/manualsExtraction/links.json
+python -m pipeline.manualsExtraction lote URL [URL ...]
 ```
 
 ---
 
-## 3. Ingestão Vetorial (`manualsIngestion-RAG`)
+## 3. Ingestão Vetorial (`pipeline/manualsIngestion-RAG`)
 
-Recebe os dados extraídos, gera embeddings via OpenAI e armazena os vetores no PostgreSQL pgvector.
+CLI que lê os `.md` da extração, divide em chunks, gera embeddings via OpenAI e grava no PostgreSQL pgvector. É idempotente: reenviar um manual substitui seus chunks.
 
-Veja o [README do manualsIngestion-RAG](./manualsIngestion-RAG/README.md) para instruções detalhadas.
+Veja o [README do manualsIngestion-RAG](./pipeline/manualsIngestion-RAG/readme.md). Requer `pipeline/manualsIngestion-RAG/.env` (use o `.env.example`).
 
-**Execução rápida:**
 ```bash
-cd manualsIngestion-RAG
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8001
+make install-ingestion
+make db-up                               # sobe o pgvector
+make ingest                              # ingere a extração mais recente
+make ingest SRC=pipeline/manualsExtraction/output/<data_hora>   # pasta ou .json específico
+make db-count                            # chunks por coleção
+make ingest-reset                        # apaga a coleção (pede confirmação)
+
+# sem Makefile (a partir da raiz)
+python pipeline/manualsIngestion-RAG [CAMINHO]
 ```
 
 ---
@@ -94,10 +105,14 @@ uvicorn app.main:app --reload --port 8001
 
 Webhook que recebe mensagens do WhatsApp via WAHA, faz busca semântica no pgvector e gera respostas com a LLM da OpenAI.
 
-Veja o [README do chat-bot](./chat-bot/README.md) para instruções detalhadas.
+Veja o [README do chat-bot](./chat-bot/readme.md) para instruções detalhadas.
 
 **Execução rápida:**
 ```bash
+make chatbot-install
+make chatbot-dev                         # ou chatbot-prod
+
+# sem Makefile
 cd chat-bot
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8002
@@ -105,11 +120,17 @@ uvicorn main:app --reload --port 8002
 
 ---
 
-## 5. Gerador de Q&A (`q&a-generator`)
+## 5. Gerador de Q&A e Avaliação (`pipeline/q&a-generator`, `pipeline/evaluation`)
 
 Utilitário para geração de datasets sintéticos de perguntas e respostas usando o Google Gemini, utilizado para avaliar a qualidade do RAG com o framework Ragas.
 
-Veja o [README do q&a-generator](./q&a-generator/README.md) para instruções detalhadas.
+Veja o [README do q&a-generator](./pipeline/q&a-generator/readme.md) para instruções detalhadas.
+
+```bash
+make install-qa install-eval
+make qa-generate                         # gera dataset sintético (Gemini)
+make eval                                # roda RAGAS sobre o dataset mais recente
+```
 
 ---
 
@@ -117,7 +138,8 @@ Veja o [README do q&a-generator](./q&a-generator/README.md) para instruções de
 
 | Camada | Tecnologia |
 |---|---|
-| Framework Web | FastAPI + Uvicorn |
+| Chatbot (web) | FastAPI + Uvicorn |
+| Pipelines | CLIs Python (argparse) + Makefile |
 | LLM | OpenAI GPT (configurável) |
 | Embeddings | OpenAI text-embedding-3-small |
 | Banco Vetorial | PostgreSQL + pgvector |
@@ -132,9 +154,14 @@ Veja o [README do q&a-generator](./q&a-generator/README.md) para instruções de
 
 ## Ordem de Inicialização Recomendada
 
-1. `docker compose up -d` — sobe o WAHA
-2. Garanta que o PostgreSQL com pgvector está rodando
-3. `uvicorn app.main:app --reload --port 8000` — inicia a Extração
-4. `uvicorn app.main:app --reload --port 8001` — inicia a Ingestão
-5. Execute o pipeline de ingestão para popular o banco vetorial
-6. `uvicorn main:app --reload --port 8002` — inicia o Chatbot
+```bash
+make install-all                         # venvs de todas as pipelines
+make chatbot-install
+make db-up                               # 1. pgvector
+make extract-links                       # 2. links.json -> .md
+make ingest                              # 3. .md -> pgvector
+docker compose up -d                     # 4. WAHA (WhatsApp)
+make chatbot-dev                         # 5. chatbot na porta 8002
+```
+
+Depois, opcionalmente: `make qa-generate` e `make eval` para avaliar o RAG. Veja todos os alvos com `make help`.

@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+requests
+openai
+langchain-openai
+langchain-postgres
+psycopg[binary]
+python-dotenv
+# Épico 1 — autenticação
+redis[hiredis]
+sqlalchemy[asyncio]
+httpx
+python-multipart
+-e git+https://github.com/frjunioalves/suap-mcp.git#egg=suap-mcp

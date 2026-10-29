@@ -1,69 +1,25 @@
 # Manuals Ingestion RAG
 
-Microsserviço FastAPI responsável por **vetorizar e armazenar manuais** no banco de dados pgvector, integrando ao pipeline RAG do SUAPIA.
+CLI responsável por **vetorizar e armazenar manuais** no banco pgvector, integrando ao pipeline RAG do SUAPIA.
 
-Recebe os manuais (extraídos em JSON), divide os textos em chunks, gera embeddings via OpenAI e persiste os vetores no PostgreSQL com extensão pgvector.
+Lê os `.md` gerados pela extração (`manualsExtraction`), divide os textos em chunks, gera embeddings via OpenAI e persiste os vetores no PostgreSQL com extensão pgvector.
 
 ## Arquitetura
 
 ```
+cli.py / __main__.py      # Entrada da CLI (argparse)
 app/
-├── main.py               # Entrada FastAPI
-├── url/url.py            # Definição das rotas
-├── controller/           # Orquestração das requisições
+├── controller/           # Orquestração da ingestão
+├── services/loader.py    # Leitura dos .md (ou .json legado) -> modelos
 ├── services/service.py   # Lógica de vetorização (chunking + pgvector)
 └── schemas/schema.py     # Modelos Pydantic
 ```
 
-## Endpoints
+## Entrada
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| POST | `/api/v1/ingestao/lote` | Ingere lista de manuais diretamente |
-| POST | `/api/v1/ingestao/arquivo-json` | Ingere a partir do formato de extração JSON |
+Pasta gerada pela extração: `output/<AAAAMMDD_HHMMSS>/<manual>/[<capitulo>/]<pagina>.md`.
 
-### POST `/api/v1/ingestao/lote`
-
-```json
-{
-  "manuais": [
-    {
-      "manual": "Manual do SUAP",
-      "versao": "1.0",
-      "topicos": [
-        {
-          "topico": "Título do tópico",
-          "texto": "Conteúdo do tópico...",
-          "links_imagens": ["https://..."]
-        }
-      ]
-    }
-  ]
-}
-```
-
-### POST `/api/v1/ingestao/arquivo-json`
-
-Aceita o formato de saída direto do serviço de extração:
-
-```json
-[
-  {
-    "nome": "nome-do-manual",
-    "resultados": [ /* lista de ManualResponse */ ]
-  }
-]
-```
-
-### Resposta
-
-```json
-{
-  "mensagem": "Ingestão concluída com sucesso!",
-  "total_manuais": 3,
-  "total_blocos_gerados": 47
-}
-```
+Do front matter de cada `.md` saem `manual` e `titulo`/`capitulo`; o tópico vira `Capítulo > Título` (ou só o título). As imagens (`![..](url)`) do corpo viram `links_imagens`. Também é aceito o `.json` legado (`[{"nome": ..., "resultados": [...]}]`).
 
 ## Pré-requisitos
 
@@ -73,10 +29,10 @@ Aceita o formato de saída direto do serviço de extração:
 
 ## Configuração
 
-**1. Instale as dependências:**
+**1. Instale as dependências (venv próprio em `.venv`):**
 
 ```bash
-pip install -r requirements.txt
+make install-ingestion
 ```
 
 **2. Crie o arquivo `.env`:**
@@ -91,24 +47,38 @@ OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 **3. Suba o banco de dados (pgvector):**
 
 ```bash
-docker compose up -d db
+make db-up
 ```
 
 ## Execução
 
+A partir da raiz do repositório:
+
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+# execução mais recente em pipeline/manualsExtraction/output
+python pipeline/manualsIngestion-RAG
+
+# pasta ou arquivo específico
+python pipeline/manualsIngestion-RAG pipeline/manualsExtraction/output/20261029_145628
+python pipeline/manualsIngestion-RAG saida.json
 ```
 
-A documentação interativa estará disponível em `http://localhost:8001/docs`.
+Atalho: `make ingest` (ou `make ingest SRC=caminho`). Código de saída: `0` ok, `1` falha na ingestão, `2` caminho inválido.
 
 ## Parâmetros de Chunking
 
 | Parâmetro | Valor |
 |-----------|-------|
-| `chunk_size` | 800 tokens |
-| `chunk_overlap` | 150 tokens |
-| Separadores | `\n\n`, `\n`, `.`, ` ` |
+| `chunk_size` | 800 caracteres (`INGESTAO_CHUNK_SIZE`) |
+| `chunk_overlap` | 150 caracteres (`INGESTAO_CHUNK_OVERLAP`) |
+| Lote de embeddings | 100 chunks (`INGESTAO_TAMANHO_LOTE`) |
+| Separadores | `\n\n`, `\n`, `. `, `; `, ` ` |
+
+## Idempotência
+
+Cada chunk recebe ID determinístico (`manual + versão + tópico + índice`). Reenviar um manual
+**substitui** seus chunks antigos (sem duplicar nem deixar órfãos). Tópicos vazios ou repetidos
+são descartados e contados em `topicos_ignorados`.
 
 ## Metadados Armazenados por Chunk
 
@@ -118,3 +88,4 @@ Cada bloco vetorizado preserva os seguintes metadados:
 - `versao` — versão do manual
 - `topico` — título do tópico
 - `links_imagens` — lista de URLs de imagens relacionadas
+- `chunk_index` / `total_chunks` — posição do bloco dentro do tópico

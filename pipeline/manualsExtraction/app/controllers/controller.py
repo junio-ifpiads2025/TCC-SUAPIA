@@ -1,76 +1,117 @@
 import asyncio
-import json
-import os
-from datetime import datetime
-from typing import List
-from fastapi import HTTPException
-from fastapi.concurrency import run_in_threadpool
-from pipeline.manualsExtraction.app.schemas.schema import LinksJsonRequest, ManualLinksResponse, ManualResponse
-from pipeline.manualsExtraction.app.services.service import download_html, extrair_dados_estilo_js
+import re
+import unicodedata
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
-async def processar_url_unica_controller(url: str) -> ManualResponse:
-    try:
-        html_content = await download_html(url)
-        resultado = await run_in_threadpool(extrair_dados_estilo_js, html_content)
-        return resultado
-    except Exception as e:
-        print(f"Erro ao processar {url}: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+from pipeline.manualsExtraction.app.schemas.schema import LinksJsonRequest, PaginaManual
+from pipeline.manualsExtraction.app.services.service import download_html, extrair_paginas
 
-async def _processar_urls(urls: List[str]) -> List[ManualResponse]:
-    """Processa uma lista de URLs e retorna os resultados sem salvar arquivo."""
-    tarefas = [processar_url_unica_controller(url) for url in urls]
-    resultados = await asyncio.gather(*tarefas, return_exceptions=True)
+OUTPUT_DIR_PADRAO = Path(__file__).resolve().parents[2] / "output"
 
-    respostas_finais = []
-    for i, resultado in enumerate(resultados):
+
+def _slug(texto: str) -> str:
+    texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
+    texto = re.sub(r"[^a-zA-Z0-9]+", "-", texto).strip("-").lower()
+    return texto[:80] or "sem-titulo"
+
+
+async def processar_url_unica(url: str, nome_manual: Optional[str] = None) -> List[PaginaManual]:
+    html_content = await download_html(url)
+    return await asyncio.to_thread(extrair_paginas, html_content, url, nome_manual)
+
+
+async def _processar_urls(urls: List[str], nome_manual: Optional[str] = None) -> Tuple[List[PaginaManual], int]:
+    """Processa URLs em paralelo; falhas são logadas e ignoradas. Retorna (páginas, urls_ok)."""
+    resultados = await asyncio.gather(*(processar_url_unica(u, nome_manual) for u in urls), return_exceptions=True)
+
+    paginas: List[PaginaManual] = []
+    ok = 0
+    for url, resultado in zip(urls, resultados):
         if isinstance(resultado, Exception):
-            print(f"Falha na URL {urls[i]} -> {resultado}")
+            print(f"❌ Falha na URL {url} -> {resultado}")
         else:
-            respostas_finais.append(resultado)
+            ok += 1
+            paginas.extend(resultado)
+    return paginas, ok
 
-    return respostas_finais
 
-def _salvar_json(dados, caminho_arquivo: str) -> None:
-    os.makedirs("output", exist_ok=True)
-    with open(caminho_arquivo, "w", encoding="utf-8") as f:
-        json.dump(dados, f, ensure_ascii=False, indent=4)
-    print(f"✅ Arquivo JSON gerado com sucesso em: {caminho_arquivo}")
+def _front_matter(p: PaginaManual) -> str:
+    def q(v: str) -> str:
+        return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
-async def processar_lote_controller(urls: List[str]) -> List[ManualResponse]:
-    respostas_finais = await _processar_urls(urls)
+    linhas = [
+        "---",
+        f"manual: {q(p.manual)}",
+        f"capitulo: {q(p.capitulo)}" if p.capitulo else "capitulo: null",
+        f"titulo: {q(p.titulo)}",
+        f"breadcrumb: {q(' > '.join(p.breadcrumb))}",
+        f"url_origem: {q(p.url_origem)}",
+        f"hash_conteudo: {p.hash_conteudo}",
+        f"n_imagens: {p.n_imagens}",
+        f"extraido_em: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        "---",
+    ]
+    return "\n".join(linhas)
 
-    if respostas_finais:
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            _salvar_json(
-                [r.model_dump() for r in respostas_finais],
-                f"output/manuais_{timestamp}.json"
-            )
-        except Exception as e:
-            print(f"⚠️ Erro ao salvar o arquivo JSON: {e}")
 
-    return respostas_finais
+def _caminho(p: PaginaManual, output_dir: Path, usados: set) -> Path:
+    pasta = output_dir / _slug(p.manual)
+    if p.capitulo:
+        pasta = pasta / _slug(p.capitulo)
+    base = _slug(p.titulo)
+    caminho = pasta / f"{base}.md"
+    n = 2
+    while caminho in usados:
+        caminho = pasta / f"{base}-{n}.md"
+        n += 1
+    usados.add(caminho)
+    return caminho
 
-async def processar_links_json_controller(payload: LinksJsonRequest) -> List[ManualLinksResponse]:
-    """Processa todos os manuais do links.json, agrupando resultados por nome."""
-    respostas: List[ManualLinksResponse] = []
+
+def _salvar_paginas(paginas: List[PaginaManual], output_dir: Path) -> Dict[str, int]:
+    """Grava um .md por página, pulando conteúdo repetido (mesmo hash)."""
+    output_dir = output_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
+    vistos: Dict[str, Path] = {}
+    usados: set = set()
+    gravados = duplicados = 0
+
+    for p in paginas:
+        if p.hash_conteudo in vistos:
+            duplicados += 1
+            print(f"⏭️  Duplicado ignorado: {' > '.join(p.breadcrumb)} (igual a {vistos[p.hash_conteudo].name})")
+            continue
+        caminho = _caminho(p, output_dir, usados)
+        caminho.parent.mkdir(parents=True, exist_ok=True)
+        corpo = f"{_front_matter(p)}\n\n# {p.titulo}\n\n{p.markdown}\n"
+        caminho.write_text(corpo, encoding="utf-8")
+        vistos[p.hash_conteudo] = caminho
+        gravados += 1
+
+    print(f"✅ {gravados} arquivo(s) .md em {output_dir} ({duplicados} duplicado(s) ignorado(s))")
+    return {"gravados": gravados, "duplicados": duplicados}
+
+
+async def processar_lote(urls: List[str], output_dir: Path = OUTPUT_DIR_PADRAO) -> Tuple[List[PaginaManual], int]:
+    paginas, ok = await _processar_urls(urls)
+    if paginas:
+        _salvar_paginas(paginas, output_dir)
+    return paginas, ok
+
+
+async def processar_links_json(payload: LinksJsonRequest, output_dir: Path = OUTPUT_DIR_PADRAO) -> Tuple[List[PaginaManual], int]:
+    """Processa o links.json; o dedup por hash vale entre todos os manuais."""
+    todas: List[PaginaManual] = []
+    ok_total = 0
 
     for nome_manual, item in payload.root.items():
         urls = [str(url) for url in item.urls]
         print(f"📄 Processando manual: {nome_manual} ({len(urls)} URL(s))")
-        resultados = await _processar_urls(urls)
-        respostas.append(ManualLinksResponse(nome=nome_manual, resultados=resultados))
+        paginas, ok = await _processar_urls(urls, nome_manual)
+        todas.extend(paginas)
+        ok_total += ok
 
-    if respostas:
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            dados = [
-                {"nome": r.nome, "resultados": [res.model_dump() for res in r.resultados]}
-                for r in respostas
-            ]
-            _salvar_json(dados, f"output/links_json_{timestamp}.json")
-        except Exception as e:
-            print(f"⚠️ Erro ao salvar o arquivo JSON: {e}")
-
-    return respostas
+    if todas:
+        _salvar_paginas(todas, output_dir)
+    return todas, ok_total

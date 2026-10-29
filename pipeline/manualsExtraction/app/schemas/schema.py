@@ -1,25 +1,21 @@
 from pydantic import BaseModel, HttpUrl, RootModel
-from typing import Dict, List
+from typing import Dict, List, Optional
 
-# --- Saída (Response) ---
-class TopicoManual(BaseModel):
-    topico: str
-    texto: str
-    links_imagens: List[str]
-
-class ManualResponse(BaseModel):
+# --- Saída ---
+class PaginaManual(BaseModel):
     manual: str
-    versao: str = "1.0"
-    topicos: List[TopicoManual]
+    capitulo: Optional[str] = None
+    titulo: str
+    url_origem: str
+    markdown: str
+    hash_conteudo: str
+    n_imagens: int = 0
 
-class ManualLinksResponse(BaseModel):
-    nome: str
-    resultados: List[ManualResponse]
+    @property
+    def breadcrumb(self) -> List[str]:
+        return [p for p in (self.manual, self.capitulo, self.titulo) if p]
 
-# --- Entrada (Request) ---
-class LoteRequest(BaseModel):
-    urls: List[HttpUrl]
-
+# --- Entrada (links.json) ---
 class ManualLinksItem(BaseModel):
     urls: List[HttpUrl]
 

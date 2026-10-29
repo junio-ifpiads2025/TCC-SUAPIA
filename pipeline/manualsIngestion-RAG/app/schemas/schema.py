@@ -11,9 +11,6 @@ class ManualResponse(BaseModel):
     versao: str = "1.0"
     topicos: List[TopicoManual]
 
-class IngestaoRequest(BaseModel):
-    manuais: List[ManualResponse]
-
 class ItemExtracaoManual(BaseModel):
     nome: str
     resultados: List[ManualResponse]
@@ -22,3 +19,4 @@ class IngestaoResponse(BaseModel):
     mensagem: str
     total_manuais: int
     total_blocos_gerados: int
+    topicos_ignorados: int = 0
