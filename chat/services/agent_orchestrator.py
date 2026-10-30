@@ -23,7 +23,7 @@ from typing import Any
 from openai import OpenAI
 from dotenv import load_dotenv
 
-from services import logger
+from services import knowledge_service, logger, prompt_service, skill_service
 from services.mcp_client import SUAPMCPClient
 from config import AGENT_NAME
 
@@ -34,8 +34,6 @@ MODELO_LLM_AGENTE = os.getenv("MODELO_LLM_AVANCADO", "gpt-4o")
 SUAP_BASE_URL = os.getenv("SUAP_BASE_URL", "https://suap.ifpi.edu.br")
 SUAP_TOKEN = os.getenv("SUAP_TOKEN", "")
 MAX_ITERATIONS = int(os.getenv("AGENT_MAX_ITERATIONS", "5"))
-
-AGENT_SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", "").replace("{AGENT_NAME}", AGENT_NAME) or None
 
 # Schema da ferramenta de busca nos manuais (encapsula o pipeline RAG)
 _SEARCH_MANUALS_SCHEMA = {
@@ -60,6 +58,49 @@ _SEARCH_MANUALS_SCHEMA = {
     },
 }
 
+# Schema da ferramenta de busca na base de conhecimento editável (CRUD admin)
+_SEARCH_KNOWLEDGE_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "search_knowledge",
+        "description": (
+            "Busca na base de conhecimento complementar do agente: avisos, regras locais, "
+            "calendários, contatos e orientações adicionadas pela instituição que NÃO estão "
+            "nos manuais do SUAP. Use quando a pergunta envolver informações institucionais "
+            "específicas ou quando search_manuals não trouxer a resposta."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Pergunta ou termo a buscar na base de conhecimento.",
+                }
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+
+def _load_skill_schema(slugs: list[str]) -> dict:
+    """Schema da ferramenta que devolve as instruções de uma skill cadastrada no painel."""
+    return {
+        "type": "function",
+        "function": {
+            "name": "load_skill",
+            "description": (
+                "Carrega as instruções completas de uma skill. Chame ANTES de responder "
+                "quando a pergunta se encaixar na descrição de alguma skill do catálogo."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string", "enum": slugs}},
+                "required": ["slug"],
+            },
+        },
+    }
+
 
 class AgentOrchestrator:
     """
@@ -73,7 +114,7 @@ class AgentOrchestrator:
         self._mcp = mcp_client
         self._rag = rag_pipeline
         self._openai = OpenAI(api_key=OPENAI_API_KEY)
-        self._tools = mcp_client.list_tools() + [_SEARCH_MANUALS_SCHEMA]
+        self._tools = mcp_client.list_tools() + [_SEARCH_MANUALS_SCHEMA, _SEARCH_KNOWLEDGE_SCHEMA]
         logger.success("AGENTE", f"AgentOrchestrator pronto — {len(self._tools)} ferramenta(s) disponível(is).")
 
     def invoke(self, user_query: str, token: str = "", history: list[dict] | None = None) -> tuple[str, list[dict]]:
@@ -110,11 +151,24 @@ class AgentOrchestrator:
         )
 
         messages: list[dict[str, Any]] = []
-        if AGENT_SYSTEM_PROMPT:
-            messages.append({"role": "system", "content": AGENT_SYSTEM_PROMPT})
+        # Prompt ativo (editável no painel) lido por mensagem: vale sem restart
+        system_prompt = prompt_service.get_system_prompt()
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
 
         # Contexto de data como mensagem de sistema separada — sempre atualizado
         messages.append({"role": "system", "content": data_contexto})
+
+        # Skills do painel: catálogo (nome + descrição) no prompt; corpo sob demanda via load_skill
+        skills = skill_service.catalog()
+        tools = self._tools
+        if skills:
+            linhas = "\n".join(f"- {s['slug']}: {s['name']} — {s['description']}" for s in skills)
+            messages.append({"role": "system", "content": (
+                "Skills disponíveis (use a ferramenta load_skill para ler as instruções "
+                f"antes de responder quando a pergunta se encaixar):\n{linhas}"
+            )})
+            tools = self._tools + [_load_skill_schema([s["slug"] for s in skills])]
 
         # Injeta histórico da conversa antes da mensagem atual
         if history:
@@ -130,7 +184,7 @@ class AgentOrchestrator:
             response = self._openai.chat.completions.create(
                 model=MODELO_LLM_AGENTE,
                 messages=messages,
-                tools=self._tools,
+                tools=tools,
                 tool_choice="auto",
             )
 
@@ -168,6 +222,10 @@ class AgentOrchestrator:
 
                 if tool_name == "search_manuals":
                     tool_result = self._run_rag(tool_args["query"], rag_metadata)
+                elif tool_name == "load_skill":
+                    tool_result = skill_service.get_body(tool_args.get("slug", "")) or "Skill não encontrada."
+                elif tool_name == "search_knowledge":
+                    tool_result = self._run_knowledge(tool_args["query"], rag_metadata)
                 else:
                     tool_result = self._mcp.call_tool(tool_name, tool_args)
 
@@ -199,6 +257,18 @@ class AgentOrchestrator:
         except Exception as e:
             logger.error("AGENTE", f"Erro no pipeline RAG: {e}")
             return "Erro ao buscar nos manuais."
+
+    def _run_knowledge(self, query: str, rag_metadata: list[dict]) -> str:
+        """
+        Busca na base de conhecimento editável e devolve o contexto bruto.
+        Resultado vazio é informado explicitamente para o modelo não inventar.
+        """
+        logger.info("AGENTE", f"Buscando na base de conhecimento: '{query}'")
+        context_str, metadata = knowledge_service.search(query)
+        if not context_str:
+            return "Nenhuma informação encontrada na base de conhecimento."
+        rag_metadata.extend(metadata)
+        return context_str
 
 
 # ---------------------------------------------------------------------------

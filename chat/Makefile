@@ -21,4 +21,4 @@ dev:
 	bash -c 'set -a && source .env.dev && set +a && $(UVICORN) $(APP) --host 0.0.0.0 --port 8002 --reload'
 
 prod:
-	bash -c 'set -a && source .env.prod && set +a && $(UVICORN) $(APP) --host 0.0.0.0 --port 8002 --workers 4'
+	bash -c 'set -a && source .env.prod && set +a && $(UVICORN) $(APP) --host 0.0.0.0 --port 8002'

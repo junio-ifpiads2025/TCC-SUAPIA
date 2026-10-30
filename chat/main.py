@@ -17,28 +17,29 @@ from routes.admin import router as admin_router
 from routes.auth import router as auth_router
 from routes.terms import router as terms_router
 from routes.webhook import router as webhook_router
-from services import logger
+from services import access_log_service, acl_service, logger, prompt_service, skill_service
+from services import providers
 from services import queue_service
-from config import AGENT_NAME
+from config import AGENT_NAME, QUEUE_CONSUMERS
 
 
 async def _queue_worker() -> None:
     """
-    Loop infinito que aciona o processamento da fila a cada 1 segundo.
-    Roda como task asyncio dentro do mesmo processo da aplicação — não é um
-    processo externo. Erros são capturados para não derrubar a task.
+    Consumidor da fila Redis: process_next() bloqueia até 1s esperando item.
+    Roda como task asyncio dentro do mesmo processo (QUEUE_CONSUMERS tasks).
+    Erros são capturados para não derrubar a task.
     """
     while True:
         try:
             await queue_service.process_next()
         except Exception as e:
             logger.error("WORKER", f"queue_worker: {e}")
-        await asyncio.sleep(1)
+            await asyncio.sleep(1)
 
 
 async def _stale_cleaner() -> None:
     """
-    Loop infinito que verifica mensagens travadas no status 'processing' a cada 60s.
+    Loop infinito que verifica itens travados em 'processing' a cada 60s.
     Cobre o caso de falha ou crash durante o processamento (RN07).
     """
     while True:
@@ -59,8 +60,20 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.success("BOOT", "Banco de dados inicializado")
 
-    asyncio.create_task(_queue_worker())
+    # Caches em memória (ACL, prompt ativo, guardrails): carregados do Postgres na subida
+    await acl_service.startup()
+    await prompt_service.startup()
+    await skill_service.startup()
+    logger.success("BOOT", "Regras de acesso, prompt e guardrails carregados")
+
+    await providers.start_all()
+
+    # Itens que ficaram em 'processing' por queda anterior voltam para 'pending'
+    await queue_service.recover_processing()
+    for _ in range(max(1, QUEUE_CONSUMERS)):
+        asyncio.create_task(_queue_worker())
     asyncio.create_task(_stale_cleaner())
+    asyncio.create_task(access_log_service.retention_loop())
     logger.success("BOOT", "Tasks de background iniciadas")
 
     yield

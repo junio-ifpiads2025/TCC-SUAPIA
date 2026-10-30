@@ -11,7 +11,7 @@ EXTRACTION    := $(PIPELINE_DIR)/manualsExtraction
 INGESTION     := $(PIPELINE_DIR)/manualsIngestion-RAG
 QA_GEN        := $(PIPELINE_DIR)/q&a-generator
 EVALUATION    := $(PIPELINE_DIR)/evaluation
-CHATBOT       := chat-bot
+CHATBOT       := chat
 
 LINKS_JSON    ?= pipeline/manualsExtraction/links.json
 EXTRACTION_OUT := $(EXTRACTION)/output
@@ -60,7 +60,7 @@ help:
 	@echo "  make qa-generate          gera dataset sintético Q&A (Gemini)"
 	@echo "  make eval                 roda RAGAS sobre o dataset mais recente"
 	@echo ""
-	@echo "Chat-bot"
+	@echo "Chat"
 	@echo "  make chatbot-install | chatbot-dev | chatbot-prod"
 	@echo ""
 	@echo "  make clean-output         remove saídas geradas pela extração"

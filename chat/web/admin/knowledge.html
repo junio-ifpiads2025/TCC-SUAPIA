@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Conhecimento{% endblock %}
+{% block content %}
+<h1 class="h3 page-title mb-4">Base de conhecimento</h1>
+<div id="msg" class="small text-body-secondary mb-2" role="status"></div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <div class="card h-100"><div class="card-body">
+      <h2 class="h5" id="form-title">Novo documento</h2>
+      <input class="form-control mb-2" id="doc-title" placeholder="Título">
+      <textarea class="form-control mb-3" id="doc-content" rows="8" placeholder="Conteúdo (máx. {{ max_chars }} caracteres)"></textarea>
+      <button class="btn btn-primary" id="save"><i class="bi bi-save me-1"></i>Salvar</button>
+      <button class="btn btn-secondary" id="cancel" style="display:none">Cancelar edição</button>
+      <hr>
+      <label class="form-label small" for="file">Ou envie arquivo (.txt/.md)</label>
+      <div class="input-group">
+        <input class="form-control" type="file" id="file" accept=".txt,.md,text/plain,text/markdown">
+        <button class="btn btn-outline-primary" id="upload"><i class="bi bi-upload me-1"></i>Enviar</button>
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card h-100"><div class="card-body">
+      <h2 class="h5"><i class="bi bi-search me-1"></i>Testar busca</h2>
+      <div class="input-group mb-3">
+        <input class="form-control" id="q" placeholder="Pergunta">
+        <button class="btn btn-outline-primary" id="search">Buscar</button>
+      </div>
+      <pre id="search-result" class="small mb-0" style="white-space:pre-wrap"></pre>
+    </div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+  <table class="table table-hover mb-0">
+    <thead><tr><th>Título</th><th>Chunks</th><th>Atualizado</th><th></th></tr></thead>
+    <tbody id="docs"></tbody>
+  </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  const csrf = document.querySelector('meta[name=csrf-token]').content;
+  const $ = (id) => document.getElementById(id);
+  let editingId = null;
+
+  function msg(text, err) { $('msg').textContent = text; $('msg').className = 'small mb-2 ' + (err ? 'text-danger' : 'text-body-secondary'); }
+
+  async function api(url, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({'X-CSRF-Token': csrf}, opts.headers || {});
+    if (opts.json !== undefined) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(opts.json);
+    }
+    const r = await fetch(url, opts);
+    if (r.status === 401) { location.href = '/admin/login'; throw new Error('401'); }
+    if (!r.ok) {
+      let d = r.statusText;
+      try { const j = await r.json(); d = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch (e) {}
+      throw new Error(d);
+    }
+    return r.status === 204 ? null : r.json();
+  }
+
+  function cell(tr, text) { const td = document.createElement('td'); td.textContent = text == null ? '' : text; tr.appendChild(td); return td; }
+
+  function btn(label, cls, fn) {
+    const b = document.createElement('button');
+    b.className = 'btn btn-sm ' + (cls || 'btn-outline-primary') + ' me-1'; b.textContent = label;
+    b.addEventListener('click', fn); return b;
+  }
+
+  async function load() {
+    const docs = await api('/admin/api/knowledge');
+    const tbody = $('docs'); tbody.replaceChildren();
+    (docs || []).forEach(function (d) {
+      const tr = document.createElement('tr');
+      cell(tr, d.title); cell(tr, d.chunk_count); cell(tr, d.updated_at || d.created_at);
+      const td = document.createElement('td');
+      td.appendChild(btn('Editar', '', function () { edit(d.id); }));
+      td.appendChild(btn('Excluir', 'btn-outline-danger', function () { remove(d.id, d.title); }));
+      tr.appendChild(td); tbody.appendChild(tr);
+    });
+  }
+
+  function reset() {
+    editingId = null; $('doc-title').value = ''; $('doc-content').value = '';
+    $('form-title').textContent = 'Novo documento'; $('cancel').style.display = 'none';
+  }
+
+  async function edit(id) {
+    try {
+      const d = await api('/admin/api/knowledge/' + encodeURIComponent(id));
+      editingId = id; $('doc-title').value = d.title; $('doc-content').value = d.content || '';
+      $('form-title').textContent = 'Editando: ' + d.title; $('cancel').style.display = '';
+      window.scrollTo(0, 0);
+    } catch (e) { msg(e.message, true); }
+  }
+
+  async function remove(id, title) {
+    if (!confirm('Excluir "' + title + '"?')) return;
+    try { await api('/admin/api/knowledge/' + encodeURIComponent(id), {method: 'DELETE'}); msg('Excluído.'); await load(); }
+    catch (e) { msg(e.message, true); }
+  }
+
+  $('save').addEventListener('click', async function () {
+    const body = {title: $('doc-title').value, content: $('doc-content').value};
+    try {
+      if (editingId) await api('/admin/api/knowledge/' + encodeURIComponent(editingId), {method: 'PUT', json: body});
+      else await api('/admin/api/knowledge', {method: 'POST', json: body});
+      msg('Salvo.'); reset(); await load();
+    } catch (e) { msg(e.message, true); }
+  });
+  $('cancel').addEventListener('click', reset);
+
+  $('upload').addEventListener('click', async function () {
+    const f = $('file').files[0];
+    if (!f) { msg('Escolha um arquivo.', true); return; }
+    const fd = new FormData(); fd.append('file', f); fd.append('title', $('doc-title').value);
+    try { await api('/admin/api/knowledge/upload', {method: 'POST', body: fd}); msg('Arquivo enviado.'); $('file').value = ''; await load(); }
+    catch (e) { msg(e.message, true); }
+  });
+
+  $('search').addEventListener('click', async function () {
+    try {
+      const r = await api('/admin/api/knowledge/search?q=' + encodeURIComponent($('q').value));
+      $('search-result').textContent = r.context || '(nenhum resultado)';
+    } catch (e) { msg(e.message, true); }
+  });
+
+  load().catch(function (e) { msg(e.message, true); });
+})();
+</script>
+{% endblock %}

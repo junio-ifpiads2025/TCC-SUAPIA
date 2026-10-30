@@ -6,11 +6,15 @@ pgvector para busca vetorial (usada pelo pipeline RAG em módulo separado).
 
 Tabelas gerenciadas aqui:
 - user_auth     : vínculo entre chat_id do WhatsApp e matrícula SUAP.
-- message_queue : fila persistente de mensagens a processar (Épico 3).
+- knowledge_document : documentos da base de conhecimento do agente (CRUD admin).
+- access_rule   : allowlist/blocklist de chat_ids (painel admin).
+- access_log    : log de acesso/atendimento (painel admin).
+- prompt_version: versões do system prompt (painel admin).
+- guardrail     : regras de entrada/saída/prompt (painel admin).
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import String, DateTime, Text, Index, text
+from sqlalchemy import Boolean, Integer, String, DateTime, Text, Index, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
@@ -58,41 +62,109 @@ class UserAuth(Base):
     )
 
 
-class MessageQueue(Base):
+class KnowledgeDocument(Base):
     """
-    Fila persistente de mensagens recebidas via WhatsApp.
+    Documento da base de conhecimento do agente (fonte da verdade do CRUD).
 
-    Ciclo de vida de uma mensagem:
-      pending → processing → completed
-                           ↘ failed  (erro ou timeout)
-
-    O índice composto (status, created_at) otimiza a query principal de
-    process_next(), que filtra por status e ordena por criação (FIFO).
+    O texto completo fica aqui; os chunks vetorizados ficam na coleção pgvector
+    `KNOWLEDGE_COLLECTION`, com ids determinísticos derivados de (id, índice).
+    `chunk_count` permite remover/atualizar os chunks sem varrer o índice vetorial.
     """
-    __tablename__ = "message_queue"
+    __tablename__ = "knowledge_document"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    chat_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    # Status possíveis: 'pending', 'processing', 'completed', 'failed'
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
-    # Preenchido apenas em caso de falha, com a descrição do erro ou 'timeout'
-    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chunk_count: Mapped[int] = mapped_column(default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
-    # Atualizado manualmente em cada transição de status para rastrear duração
-    updated_at: Mapped[datetime | None] = mapped_column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=True,
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    __table_args__ = (
-        # Índice composto para acelerar a query de busca por status + ordem FIFO (RN07)
-        Index("ix_message_queue_status_created_at", "status", "created_at"),
-    )
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class AccessRule(Base):
+    """Allowlist e blocklist numa tabela. `block` sempre vence `allow`."""
+    __tablename__ = "access_rule"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chat_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)  # 'allow' | 'block'
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class AccessLog(Base):
+    """
+    Log de acesso. Eventos: received, blocked, denied, rate_limited,
+    guardrail_input, guardrail_output, answered, failed, e `admin_*` (ações do painel,
+    com chat_id=`admin:<usuário>`).
+    """
+    __tablename__ = "access_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chat_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    provider: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    event: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class PromptVersion(Base):
+    """Versão do system prompt; exatamente uma tem active=True."""
+    __tablename__ = "prompt_version"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    author: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Skill(Base):
+    """Skill do agente (instruções em markdown), editável no painel."""
+    __tablename__ = "skill"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class Guardrail(Base):
+    """
+    Regra de guardrail.
+    scope: input | output | prompt
+    match_type: keyword | regex (só input/output)
+    action: block | mask | replace | instruct (instruct só para prompt)
+    """
+    __tablename__ = "guardrail"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scope: Mapped[str] = mapped_column(String(10), nullable=False)
+    match_type: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    pattern: Mapped[str | None] = mapped_column(Text, nullable=True)
+    action: Mapped[str] = mapped_column(String(10), nullable=False)
+    response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 async def init_db() -> None:

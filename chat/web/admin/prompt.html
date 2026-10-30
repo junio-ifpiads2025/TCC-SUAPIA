@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Prompt{% endblock %}
+{% block content %}
+<h1 class="h3 page-title mb-4">System prompt</h1>
+{% if msg %}<div class="alert alert-success"><i class="bi bi-check-circle me-1"></i>Ação concluída: {{ msg }}.</div>{% endif %}
+{% if error %}<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-1"></i>{{ error }}</div>{% endif %}
+
+<div class="card mb-4">
+  <div class="card-body">
+    <p class="small text-body-secondary">
+      {% if active %}Versão ativa: <span class="badge text-bg-primary">#{{ active.id }}</span> por {{ active.author or '—' }} em {{ active.created_at }}.
+      {% else %}Nenhuma versão salva; usando o valor do ambiente.{% endif %}
+      As regras de comportamento ativas (guardrails de escopo prompt) são anexadas automaticamente ao final. Use <code>{% raw %}{AGENT_NAME}{% endraw %}</code> para o nome do agente.
+    </p>
+    <form method="post" action="/admin/prompt">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <textarea class="form-control mb-3" name="content" rows="18" required>{{ content }}</textarea>
+      <button class="btn btn-primary" type="submit"><i class="bi bi-save me-1"></i>Salvar nova versão</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header bg-transparent fw-semibold"><i class="bi bi-clock-history me-1"></i>Histórico</div>
+  <div class="table-responsive">
+  <table class="table table-hover mb-0">
+    <thead><tr><th>#</th><th>Autor</th><th>Criada em</th><th>Prévia</th><th></th></tr></thead>
+    <tbody>
+    {% for v in versions %}
+    <tr>
+      <td>{{ v.id }}{% if v.active %} <span class="badge text-bg-success">ativa</span>{% endif %}</td>
+      <td>{{ v.author or '—' }}</td>
+      <td class="text-nowrap small">{{ v.created_at }}</td>
+      <td><details><summary class="small">{{ v.content[:80] }}</summary><pre class="small mt-2 mb-0" style="white-space:pre-wrap">{{ v.content }}</pre></details></td>
+      <td class="text-end">{% if not v.active %}
+        <form method="post" action="/admin/prompt/{{ v.id }}/activate" class="m-0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-arrow-counterclockwise"></i> Restaurar</button>
+        </form>{% endif %}</td>
+    </tr>
+    {% else %}<tr><td colspan="5" class="text-center text-body-secondary py-3">Sem versões.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

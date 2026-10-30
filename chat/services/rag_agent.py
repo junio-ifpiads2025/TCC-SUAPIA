@@ -3,7 +3,7 @@ from openai import OpenAI
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 from dotenv import load_dotenv
-from services import logger
+from services import logger, prompt_service
 
 load_dotenv()
 
@@ -18,10 +18,8 @@ PGVECTOR_COLLECTION = os.getenv("PGVECTOR_COLLECTION", "manuais_suap_ifpi")
 # --- Novas Configurações via .env ---
 MODELO_LLM = os.getenv("MODELO_LLM", "gpt-3.5-turbo")
 MODELO_EMBEDDING = os.getenv("MODELO_EMBEDDING", "text-embedding-3-small")
-SYSTEM_PROMPT = os.getenv(
-    "SYSTEM_PROMPT",
-    "Você é um assistente virtual especialista nos manuais do SUAP do IFPI. Use o CONTEXTO abaixo para responder à pergunta do usuário. Sempre responda em Português (Brasil). Se a resposta não estiver no contexto, diga que não sabe. Não invente informações."
-)
+# Fallback usado só enquanto não existe prompt no banco (editável em /admin/prompt)
+SYSTEM_PROMPT = "Você é um assistente virtual especialista nos manuais do SUAP do IFPI. Use o CONTEXTO abaixo para responder à pergunta do usuário. Sempre responda em Português (Brasil). Se a resposta não estiver no contexto, diga que não sabe. Não invente informações."
 # Converte a temperatura para float (decimal), usando 0.3 como padrão se não encontrar
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.3"))
 
@@ -71,7 +69,7 @@ def gerar_resposta_com_contexto(pergunta: str):
         res_openai = openai_client.chat.completions.create(
             model=MODELO_LLM,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": prompt_service.get_system_prompt(SYSTEM_PROMPT) or SYSTEM_PROMPT},
                 {"role": "user", "content": prompt_contexto},
             ],
             temperature=TEMPERATURE,
@@ -107,7 +105,7 @@ def gerar_resposta(pergunta: str):
         res_openai = openai_client.chat.completions.create(
             model=MODELO_LLM,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": prompt_service.get_system_prompt(SYSTEM_PROMPT) or SYSTEM_PROMPT},
                 {"role": "user", "content": prompt_contexto},
             ],
             temperature=TEMPERATURE,

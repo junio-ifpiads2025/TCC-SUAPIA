@@ -15,7 +15,7 @@ respostas anteriores sem novas chamadas ao SUAP.
 
 import asyncio
 
-from services import logger
+from services import access_log_service, guardrail_service, logger
 from services import thread_service
 from services.session_service import get_token
 from config import ABOUT_TEXT, FALLBACK_TEXT, MENU_TEXT, UNKNOWN_COMMAND_TEXT
@@ -41,6 +41,12 @@ async def route(chat_id: str, message: str) -> tuple[str, list[dict]]:
     if body.startswith("/"):
         return UNKNOWN_COMMAND_TEXT, []
 
+    # Guardrail de entrada: bloqueia sem acionar o LLM
+    gr = guardrail_service.check_input(body)
+    if gr.blocked:
+        access_log_service.log_event(chat_id, "guardrail_input", detail=gr.rule)
+        return gr.response, []
+
     # Recupera token e histórico de forma concorrente
     token, history = await asyncio.gather(
         get_token(chat_id),
@@ -55,6 +61,11 @@ async def route(chat_id: str, message: str) -> tuple[str, list[dict]]:
     except Exception as e:
         logger.error("ROUTER", f"route_error chat_id={chat_id} error={e}")
         return FALLBACK_TEXT, []
+
+    # Guardrail de saída: mascara/substitui antes de persistir e enviar
+    resposta, regras = guardrail_service.apply_output(resposta)
+    if regras:
+        access_log_service.log_event(chat_id, "guardrail_output", detail=", ".join(regras))
 
     # Persiste o par (pergunta, resposta) no histórico para a próxima mensagem
     await thread_service.append_messages(chat_id, body, resposta)

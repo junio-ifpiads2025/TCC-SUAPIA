@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Resumo{% endblock %}
+{% block content %}
+<h1 class="h3 page-title mb-4">Resumo</h1>
+<div class="row g-3">
+  <div class="col-12 col-md-6 col-xl-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="stat-icon bg-primary-subtle text-primary"><i class="bi bi-inbox"></i></div>
+        <h2 class="h6 mb-0">Fila de mensagens</h2>
+      </div>
+      <ul class="list-unstyled mb-3">
+        <li class="d-flex justify-content-between"><span class="text-body-secondary">Pendentes</span><strong>{{ queue.pending }}</strong></li>
+        <li class="d-flex justify-content-between"><span class="text-body-secondary">Processando</span><strong>{{ queue.processing }}</strong></li>
+        <li class="d-flex justify-content-between"><span class="text-body-secondary">Falhas</span><strong class="{{ 'text-danger' if queue.failed }}">{{ queue.failed }}</strong></li>
+      </ul>
+      <a href="/admin/queue" class="stretched-link small">Ver fila <i class="bi bi-arrow-right"></i></a>
+    </div></div>
+  </div>
+  <div class="col-12 col-md-6 col-xl-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="stat-icon bg-warning-subtle text-warning-emphasis"><i class="bi bi-person-lock"></i></div>
+        <h2 class="h6 mb-0">Controle de acesso</h2>
+      </div>
+      <ul class="list-unstyled mb-3">
+        <li class="d-flex justify-content-between"><span class="text-body-secondary">Liberados</span><strong class="text-success">{{ acl.allow }}</strong></li>
+        <li class="d-flex justify-content-between"><span class="text-body-secondary">Bloqueados</span><strong class="text-danger">{{ acl.block }}</strong></li>
+      </ul>
+      <a href="/admin/access" class="stretched-link small">Gerenciar <i class="bi bi-arrow-right"></i></a>
+    </div></div>
+  </div>
+  <div class="col-12 col-md-6 col-xl-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="stat-icon bg-success-subtle text-success"><i class="bi bi-chat-dots"></i></div>
+        <h2 class="h6 mb-0">Respondidas hoje</h2>
+      </div>
+      <p class="display-5 fw-semibold mb-3">{{ answered }}</p>
+      <a href="/admin/logs" class="stretched-link small">Ver logs <i class="bi bi-arrow-right"></i></a>
+    </div></div>
+  </div>
+  <div class="col-12 col-md-6 col-xl-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="stat-icon bg-info-subtle text-info-emphasis"><i class="bi bi-chat-square-text"></i></div>
+        <h2 class="h6 mb-0">Prompt ativo</h2>
+      </div>
+      {% if prompt %}
+        <p class="mb-1">Versão <span class="badge text-bg-primary">#{{ prompt.id }}</span></p>
+        <p class="small text-body-secondary mb-3">{{ prompt.created_at }} · {{ prompt.author }}</p>
+      {% else %}
+        <p class="small text-body-secondary mb-3">Padrão do código (sem versão salva).</p>
+      {% endif %}
+      <a href="/admin/prompt" class="stretched-link small">Editar prompt <i class="bi bi-arrow-right"></i></a>
+    </div></div>
+  </div>
+</div>
+{% endblock %}

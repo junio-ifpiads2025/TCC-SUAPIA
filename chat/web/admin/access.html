@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Acesso{% endblock %}
+{% block content %}
+<h1 class="h3 page-title mb-4">Controle de acesso</h1>
+{% if msg %}<div class="alert alert-info">{{ msg }}</div>{% endif %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <form method="post" action="/admin/access" class="row g-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-12 col-lg-4">
+        <label class="form-label small mb-1">Número</label>
+        <input class="form-control" name="chat_id" placeholder="whatsapp:5586999999999@c.us" required>
+      </div>
+      <div class="col-6 col-lg-2">
+        <label class="form-label small mb-1">Tipo</label>
+        <select class="form-select" name="kind">
+          <option value="allow">Permitir</option>
+          <option value="block">Bloquear</option>
+        </select>
+      </div>
+      <div class="col-6 col-lg-3">
+        <label class="form-label small mb-1">Motivo</label>
+        <input class="form-control" name="reason" placeholder="Opcional">
+      </div>
+      <div class="col-12 col-lg-3 d-flex gap-3 align-items-center">
+        <div class="form-check mb-0">
+          <input class="form-check-input" type="checkbox" name="clear_session" value="1" id="clear_session">
+          <label class="form-check-label small" for="clear_session">encerrar sessão ao bloquear</label>
+        </div>
+        <button class="btn btn-primary ms-auto" type="submit"><i class="bi bi-save me-1"></i>Salvar</button>
+      </div>
+    </form>
+    <p class="small text-body-secondary mt-3 mb-0"><i class="bi bi-info-circle me-1"></i>Bloqueio sempre vence a permissão. Salvar um número já existente troca o tipo.</p>
+  </div>
+</div>
+
+<form method="get" class="input-group mb-4">
+  <span class="input-group-text"><i class="bi bi-search"></i></span>
+  <input class="form-control" name="q" value="{{ q }}" placeholder="Buscar por número">
+  <button class="btn btn-outline-primary" type="submit">Buscar</button>
+</form>
+
+{% for title, rules, color, icon in [('Bloqueados', block, 'danger', 'slash-circle'), ('Permitidos', allow, 'success', 'check-circle')] %}
+<div class="card mb-4">
+  <div class="card-header bg-transparent fw-semibold">
+    <i class="bi bi-{{ icon }} text-{{ color }} me-1"></i>{{ title }}
+    <span class="badge text-bg-{{ color }} ms-1">{{ rules|length }}</span>
+  </div>
+  <div class="table-responsive">
+  <table class="table table-hover mb-0">
+    <thead><tr><th>Número</th><th>Motivo</th><th>Por</th><th>Desde</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rules %}
+    <tr>
+      <td>{{ r.chat_id }}</td>
+      <td>{{ r.reason or '' }}</td>
+      <td>{{ r.created_by or '' }}</td>
+      <td class="text-nowrap small">{{ r.created_at.strftime('%d/%m/%Y %H:%M') if r.created_at else '' }}</td>
+      <td class="text-end">
+        <form method="post" action="/admin/access/remove" class="m-0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="chat_id" value="{{ r.chat_id }}">
+          <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-trash"></i> Remover</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="text-center text-body-secondary py-3">Nenhum registro.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

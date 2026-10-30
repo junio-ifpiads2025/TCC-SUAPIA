@@ -11,4 +11,7 @@ redis[hiredis]
 sqlalchemy[asyncio]
 httpx
 python-multipart
--e git+https://github.com/frjunioalves/suap-mcp.git#egg=suap-mcp
+langchain-text-splitters
+jinja2
+itsdangerous
+pytest

@@ -1,0 +1,37 @@
+<div class="px-3 py-2 small text-body-secondary border-bottom">
+  <i class="bi bi-arrow-repeat me-1"></i>
+  {% if which == 'pending' %}Pendentes{% elif which == 'processing' %}Em atendimento{% elif which == 'done' %}Atendidas{% else %}Falhas{% endif %}:
+  <strong>{{ items|length }}</strong> (pendentes {{ counts.pending }}, em atendimento {{ counts.processing }}, falhas {{ counts.failed }}, atendidas {{ counts.done }})
+</div>
+<div class="table-responsive">
+<table class="table table-hover mb-0">
+  <thead>
+    <tr><th>Entrada</th><th>Chat</th><th>Provider</th><th>Conteúdo</th>{% if which == 'done' %}<th>Resposta</th><th>Duração</th>{% endif %}<th>Tentativas</th>
+    {% if which == 'failed' %}<th>Erro</th>{% endif %}<th></th></tr>
+  </thead>
+  <tbody>
+  {% for it in items %}
+    <tr>
+      <td class="text-nowrap small">{{ it.enqueued_at }}</td>
+      <td class="small">{{ it.chat_id }}</td>
+      <td><span class="badge text-bg-secondary">{{ it.provider }}</span></td>
+      <td>{{ it.content }}</td>
+      {% if which == 'done' %}<td style="white-space:pre-wrap">{{ it.response }}</td><td class="text-nowrap small">{{ '%.1f'|format((it.duration_ms or 0) / 1000) }}s</td>{% endif %}
+      <td>{{ it.attempts }}</td>
+      {% if which == 'failed' %}<td class="text-danger small">{{ it.error }}</td>{% endif %}
+      <td class="text-end">
+        {% if which == 'pending' %}
+          <button class="btn btn-sm btn-outline-danger" hx-post="/admin/queue/{{ it.id }}/cancel"
+                  hx-target="#queue-table" hx-swap="innerHTML"><i class="bi bi-x-lg"></i> Cancelar</button>
+        {% elif which == 'failed' %}
+          <button class="btn btn-sm btn-outline-primary" hx-post="/admin/queue/{{ it.id }}/requeue"
+                  hx-target="#queue-table" hx-swap="innerHTML"><i class="bi bi-arrow-clockwise"></i> Reenfileirar</button>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="text-center text-body-secondary py-4"><i class="bi bi-inbox fs-4 d-block"></i>Nenhum item.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>

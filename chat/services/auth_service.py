@@ -137,11 +137,15 @@ async def get_linked_matricula(chat_id: str) -> str | None:
 async def _fetch_and_save_profile(chat_id: str, token: str, ttl: int) -> str | None:
     """Busca nome e curso do usuário no SUAP e salva no Redis. Retorna o nome_usual."""
     try:
-        from suap_api import SuapClient
-        client = SuapClient(SUAP_BASE_URL, token=token)
-        dados = client.comum.get_my_data()
-        nome = dados.nome_usual or "Aluno"
-        curso = dados.vinculo.curso if dados.vinculo else None
+        headers = {"Authorization": f"Bearer {token}"}
+        async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
+            # Nome vem de /api/rh/eu/ (fora de "Ensino"; usado só na saudação do login).
+            pessoa = await client.get(f"{SUAP_BASE_URL}/api/rh/eu/")
+            pessoa.raise_for_status()
+            aluno = await client.get(f"{SUAP_BASE_URL}/api/ensino/meus-dados-aluno/")
+        dados = pessoa.json()
+        nome = dados.get("nome_usual") or dados.get("primeiro_nome") or "Aluno"
+        curso = aluno.json().get("curso") if aluno.status_code == 200 else None
         await set_profile(chat_id, nome, curso, ttl)
         logger.success("AUTH", f"Perfil salvo — {nome} | curso={curso}")
         return nome

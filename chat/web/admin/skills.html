@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Skills e guardrails{% endblock %}
+{% macro rule_fields(g) %}
+  <div class="row g-3">
+    <div class="col-md-4"><label class="form-label small">Nome</label><input class="form-control" name="name" value="{{ g.name if g else '' }}" required maxlength="100" placeholder="Bloquear CPF"></div>
+    <div class="col-md-8"><label class="form-label small">Descrição</label><input class="form-control" name="description" value="{{ (g.description if g else '') or '' }}" placeholder="Impede o envio de CPF na conversa"></div>
+    <div class="col-6 col-md-3"><label class="form-label small">Escopo</label>
+      <select class="form-select" name="scope">{% for s in scopes %}<option value="{{ s }}" {{ 'selected' if g and g.scope == s }}>{{ s }}</option>{% endfor %}</select></div>
+    <div class="col-6 col-md-3"><label class="form-label small">Tipo</label>
+      <select class="form-select" name="match_type">{% for m in match_types %}<option value="{{ m }}" {{ 'selected' if g and g.match_type == m }}>{{ m }}</option>{% endfor %}</select></div>
+    <div class="col-6 col-md-3"><label class="form-label small">Ação</label>
+      <select class="form-select" name="action">{% for a in actions %}<option value="{{ a }}" {{ 'selected' if g and g.action == a }}>{{ a }}</option>{% endfor %}</select></div>
+    <div class="col-6 col-md-3"><label class="form-label small">Prioridade</label><input class="form-control" name="priority" type="number" value="{{ g.priority if g else 100 }}"></div>
+    <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="enabled" {{ 'checked' if (not g) or g.enabled }}><label class="form-check-label small">Ativa</label></div></div>
+    <div class="col-12"><label class="form-label small">Padrão (termos separados por vírgula/linha, ou regex)</label>
+      <textarea class="form-control" name="pattern" rows="2" placeholder="keyword: senha, token, cartão de crédito&#10;regex: \b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b">{{ (g.pattern if g else '') or '' }}</textarea></div>
+    <div class="col-md-6"><label class="form-label small">Resposta (block/replace)</label>
+      <textarea class="form-control" name="response" rows="2" placeholder="Desculpe, não posso ajudar com isso.">{{ (g.response if g else '') or '' }}</textarea></div>
+    <div class="col-md-6"><label class="form-label small">Instrução (escopo prompt)</label>
+      <textarea class="form-control" name="instruction" rows="2" placeholder="Não opine sobre política, partidos ou candidatos. Se perguntarem, diga educadamente que só pode ajudar com assuntos acadêmicos do IFPI.">{{ (g.instruction if g else '') or '' }}</textarea></div>
+  </div>
+{% endmacro %}
+{% macro skill_fields(k) %}
+  <div class="row g-3">
+    <div class="col-md-4"><label class="form-label small">Nome</label><input class="form-control" name="name" value="{{ k.name if k else '' }}" required maxlength="100" placeholder="Consulta de notas"></div>
+    <div class="col-md-8"><label class="form-label small">Descrição</label><input class="form-control" name="description" value="{{ (k.description if k else '') or '' }}" placeholder="Use quando o aluno perguntar sobre notas, médias ou boletim"></div>
+    <div class="col-12"><label class="form-label small">Instruções (markdown)</label>
+      <textarea class="form-control" name="body" rows="8" required placeholder="# Consulta de notas&#10;&#10;1. Pergunte o período letivo se não informado.&#10;2. Use a ferramenta de boletim para buscar as notas.&#10;3. Apresente em lista: disciplina, nota, situação.&#10;&#10;## Regras&#10;- Nunca exiba notas de outro aluno.">{{ (k.body if k else '') or '' }}</textarea></div>
+  </div>
+{% endmacro %}
+{% block content %}
+<h1 class="h3 page-title mb-4">Skills</h1>
+{% if msg %}<div class="alert alert-success"><i class="bi bi-check-circle me-1"></i>Ação concluída: {{ msg }}.</div>{% endif %}
+{% if error %}<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-1"></i>{{ error }}</div>{% endif %}
+
+<div class="card mb-4">
+  <div class="table-responsive">
+  <table class="table table-hover mb-0">
+    <thead><tr><th>Skill</th><th>Descrição</th></tr></thead>
+    <tbody>
+    {% for s in skills %}
+    <tr><td><a class="fw-semibold text-decoration-none" href="/admin/skills?skill={{ s.slug | urlencode }}">{{ s.name }}</a></td>
+        <td>{{ s.description }}</td></tr>
+    {% else %}<tr><td colspan="2" class="text-center text-body-secondary py-3">Nenhuma skill cadastrada.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if selected %}
+  <div class="card-body border-top">
+    <h2 class="h5">{{ selected.name }} <small class="text-body-secondary">({{ selected.slug }})</small></h2>
+    <form method="post" action="/admin/skills/{{ selected.slug | urlencode }}" class="mb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {{ skill_fields(selected) }}
+      <button class="btn btn-primary mt-3" type="submit"><i class="bi bi-save me-1"></i>Salvar</button>
+    </form>
+    <form method="post" action="/admin/skills/{{ selected.slug | urlencode }}/delete" onsubmit="return confirm('Remover skill?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-outline-danger" type="submit"><i class="bi bi-trash me-1"></i>Remover</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card mb-5">
+  <div class="card-header bg-transparent fw-semibold"><i class="bi bi-plus-circle me-1"></i>Nova skill</div>
+  <div class="card-body">
+    <form method="post" action="/admin/skills">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="mb-3"><label class="form-label small">Slug</label>
+        <input class="form-control" name="slug" required maxlength="80" pattern="[A-Za-z0-9_-]+" placeholder="minha-skill"></div>
+      {{ skill_fields(none) }}
+      <button class="btn btn-primary mt-3" type="submit"><i class="bi bi-plus-lg me-1"></i>Criar</button>
+    </form>
+  </div>
+</div>
+
+<h1 class="h3 page-title mb-4">Guardrails</h1>
+<div class="card mb-4">
+  <div class="table-responsive">
+  <table class="table table-hover mb-0">
+    <thead><tr><th>Prio</th><th>Nome</th><th>Escopo</th><th>Ação</th><th>Padrão</th><th>Ativa</th><th></th></tr></thead>
+    <tbody>
+    {% for g in guardrails %}
+    <tr>
+      <td>{{ g.priority }}</td><td class="fw-semibold">{{ g.name }}</td>
+      <td><span class="badge text-bg-secondary">{{ g.scope }}</span></td>
+      <td><span class="badge text-bg-info">{{ g.action }}</span></td>
+      <td><code>{{ (g.pattern or g.instruction or '')[:60] }}</code></td>
+      <td>{% if g.enabled %}<span class="badge text-bg-success">sim</span>{% else %}<span class="badge text-bg-secondary">não</span>{% endif %}</td>
+      <td class="text-end">
+        <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#gr-{{ g.id }}"><i class="bi bi-pencil"></i> Editar</button>
+      </td>
+    </tr>
+    <tr class="collapse" id="gr-{{ g.id }}">
+      <td colspan="7" class="bg-body-tertiary">
+        <form method="post" action="/admin/guardrails/{{ g.id }}" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          {{ rule_fields(g) }}
+          <button class="btn btn-primary mt-3" type="submit"><i class="bi bi-save me-1"></i>Salvar</button>
+        </form>
+        <form method="post" action="/admin/guardrails/{{ g.id }}/delete" onsubmit="return confirm('Remover regra?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn btn-outline-danger" type="submit"><i class="bi bi-trash me-1"></i>Remover</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}<tr><td colspan="7" class="text-center text-body-secondary py-3">Sem regras.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header bg-transparent fw-semibold"><i class="bi bi-plus-circle me-1"></i>Nova regra</div>
+  <div class="card-body">
+    <p class="small text-body-secondary"><i class="bi bi-info-circle me-1"></i>instruct só no escopo prompt; mask só em output; block/replace em input/output. Regras de prompt não usam padrão.</p>
+    <form method="post" action="/admin/guardrails">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {{ rule_fields(none) }}
+      <button class="btn btn-primary mt-3" type="submit"><i class="bi bi-plus-lg me-1"></i>Criar</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header bg-transparent fw-semibold"><i class="bi bi-flask me-1"></i>Testar regras</div>
+  <div class="card-body">
+    <textarea class="form-control mb-3" id="gr-text" rows="3" maxlength="2000" placeholder="Texto de exemplo (nada é enviado)"></textarea>
+    <button class="btn btn-outline-primary" type="button" id="gr-test"><i class="bi bi-play-fill"></i> Testar</button>
+    <pre id="gr-result" class="mt-3 mb-0 small text-body-secondary" style="white-space:pre-wrap"></pre>
+  </div>
+</div>
+<script>
+  document.getElementById('gr-test').addEventListener('click', async function () {
+    var out = document.getElementById('gr-result');
+    var r = await fetch('/admin/api/guardrails/test', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json',
+                'X-CSRF-Token': document.querySelector('meta[name=csrf-token]').content},
+      body: JSON.stringify({text: document.getElementById('gr-text').value})
+    });
+    out.textContent = JSON.stringify(await r.json(), null, 2);  // textContent: sem XSS
+  });
+</script>
+{% endblock %}

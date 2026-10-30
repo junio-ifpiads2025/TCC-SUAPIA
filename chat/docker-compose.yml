@@ -7,3 +7,6 @@ services:
       - .env.dev
     ports:
       - "8002:8002"
+    volumes:
+      # Skills editáveis sem rebuild
+      - ./prompts:/app/prompts

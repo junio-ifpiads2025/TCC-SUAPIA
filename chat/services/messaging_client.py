@@ -1,25 +1,36 @@
 """
-Contrato de mensageria do SUAP-IA.
+Fachada de mensageria do SUAP-IA.
 
-Define as funções públicas de envio de mensagens. Nenhuma rota ou serviço
-deve importar diretamente do provider (waha_client, etc.) — sempre importam
-deste módulo. Isso permite trocar o provider de mensageria alterando apenas
-os imports abaixo, sem modificar nenhuma outra parte da aplicação.
+Ponto único de envio de mensagens: rotas e serviços importam apenas daqui, sem
+saber qual plataforma (WhatsApp, Telegram...) atende cada chat_id. O provider
+é escolhido pelo chat_id (ver services/providers/__init__.py) e o contrato que
+ele implementa está em services/providers/base.py.
 
-Contrato público:
-  enviar_texto(chat_id: str, texto: str) -> None          — síncrono
-  enviar_imagem(chat_id: str, url: str) -> None           — síncrono
-  enviar_texto_async(chat_id: str, texto: str) -> None    — assíncrono (await)
-
-Para trocar de provider: implemente as 3 funções em services/<provider>_client.py
-e atualize os imports abaixo.
+Funções públicas (todas assíncronas):
+  enviar_texto_async(chat_id, texto)
+  enviar_imagem_async(chat_id, url)
+  marcar_lida_async(chat_id, message_id=None)
+  iniciar_digitacao_async(chat_id)
 """
 
-from services.waha_client import (
-    marcar_lida_waha as marcar_lida,          # marcar_lida(chat_id, message_id=None)
-    marcar_lida_waha_async as marcar_lida_async,  # marcar_lida_async(chat_id, message_id=None)
-    iniciar_digitacao_waha_async as iniciar_digitacao_async,
-    enviar_mensagem_waha as enviar_texto,
-    enviar_imagem_waha as enviar_imagem,
-    enviar_mensagem_waha_async as enviar_texto_async,
-)
+from services.providers import resolve
+
+
+async def enviar_texto_async(chat_id: str, texto: str) -> None:
+    provider, native_id = resolve(chat_id)
+    await provider.enviar_texto(native_id, texto)
+
+
+async def enviar_imagem_async(chat_id: str, url: str) -> None:
+    provider, native_id = resolve(chat_id)
+    await provider.enviar_imagem(native_id, url)
+
+
+async def marcar_lida_async(chat_id: str, message_id: str | None = None) -> None:
+    provider, native_id = resolve(chat_id)
+    await provider.marcar_lida(native_id, message_id)
+
+
+async def iniciar_digitacao_async(chat_id: str) -> None:
+    provider, native_id = resolve(chat_id)
+    await provider.iniciar_digitacao(native_id)

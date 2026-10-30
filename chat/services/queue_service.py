@@ -1,32 +1,66 @@
 """
-Serviço de fila de mensagens do SUAP-IA.
+Serviço de fila de mensagens do SUAP-IA (Redis, listas).
 
-Gerencia o ciclo de vida completo de uma mensagem recebida:
-  enqueue() → process_next() → _process_message() → completed/failed
+Ciclo de vida de uma mensagem recebida:
+  enqueue() → process_next() → _process_item() → removida de 'processing'
+                                              ↘ 'failed' (erro/timeout esgotado)
 
-A fila é armazenada no PostgreSQL (tabela message_queue), garantindo
-persistência mesmo em caso de reinício da aplicação.
+Chaves Redis:
+- suap:queue:pending    (list) aguardando; LPUSH na entrada, consumo pela direita (FIFO)
+- suap:queue:processing (list) em atendimento (BLMOVE pending → processing)
+- suap:queue:started    (hash) id → timestamp de início do atendimento
+- suap:queue:failed     (list) falhas/timeouts, limitada a FAILED_MAX itens
+- suap:queue:done       (list) atendidas (com resposta), limitada a DONE_MAX itens
 
-Garantias de ordem e concorrência:
-- Mesmo chat_id: processamento FIFO — uma mensagem por vez (RN08).
-- chat_ids distintos: processados em paralelo via asyncio.gather (RN08).
-- Mensagens travadas em 'processing' são marcadas como 'failed' pelo
-  stale_cleaner após QUEUE_TIMEOUT_MINUTES (RN07).
+Payload (JSON): {id, chat_id, provider, content, enqueued_at, attempts}.
+
+Garantias:
+- Nada se perde se o processo cair: na subida recover_processing() devolve
+  tudo de 'processing' para 'pending'.
+- Mesmo chat_id é atendido um por vez, mesmo com vários consumidores (RN08).
+- Itens parados em 'processing' além de QUEUE_TIMEOUT_MINUTES voltam para
+  'pending' (até QUEUE_MAX_ATTEMPTS) ou vão para 'failed' (RN07).
 """
 
 import asyncio
-from datetime import datetime, timezone, timedelta
+import json
+import time
+import uuid
+from datetime import datetime, timezone
 
-from sqlalchemy import select
-
-from config import AGENT_NAME, MAX_DAILY_MESSAGES, QUEUE_TIMEOUT_MINUTES
-from models.database import AsyncSessionLocal, MessageQueue
-from services import logger
+from config import AGENT_NAME, MAX_DAILY_MESSAGES, QUEUE_MAX_ATTEMPTS, QUEUE_TIMEOUT_MINUTES
+from services import access_log_service, logger
 from services.auth_service import generate_onboarding_link, logout
 from services.message_router import route
 from services.messaging_client import enviar_texto_async, marcar_lida_async, iniciar_digitacao_async
-from services.session_service import delete_token, increment_rate, is_authenticated, get_profile, delete_profile
+from services.session_service import (
+    delete_token, increment_rate, is_authenticated, get_profile, delete_profile, get_redis,
+)
 from services import thread_service
+
+PENDING = "suap:queue:pending"
+PROCESSING = "suap:queue:processing"
+STARTED = "suap:queue:started"
+FAILED = "suap:queue:failed"
+FAILED_MAX = 500
+DONE = "suap:queue:done"
+DONE_MAX = 500
+DONE_RESPONSE_MAX = 4000
+
+_KEYS = {"pending": PENDING, "processing": PROCESSING, "failed": FAILED, "done": DONE}
+
+# Trava por chat_id (dentro do processo) para manter FIFO por conversa
+# quando há mais de um consumidor.
+_chat_locks: dict[str, asyncio.Lock] = {}
+
+
+def _provider_of(chat_id: str) -> str:
+    """Deduz o provider pelo namespace do chat_id ('telegram:123'); padrão waha."""
+    return chat_id.split(":", 1)[0] if ":" in chat_id else "waha"
+
+
+def _dumps(item: dict) -> str:
+    return json.dumps(item, ensure_ascii=False, separators=(",", ":"))
 
 
 async def enqueue(chat_id: str, content: str, message_id: str | None = None) -> None:
@@ -37,9 +71,11 @@ async def enqueue(chat_id: str, content: str, message_id: str | None = None) -> 
       1. Comando /sair — encerra sessão imediatamente, sem enfileirar.
       2. Autenticação (RF01/RF10) — se não autenticado, envia link de onboarding.
       3. Rate limit diário (RN06) — se cota esgotada, envia aviso.
-      4. Insere na fila com status='pending' (RF11).
+      4. Insere em suap:queue:pending (RF11).
     """
-    # Marca como lida imediatamente ao receber — antes de qualquer processamento (WAHA anti-ban)
+    provider = _provider_of(chat_id)
+
+    # Marca como lida imediatamente ao receber — antes de qualquer processamento (anti-ban)
     await marcar_lida_async(chat_id, message_id)
 
     # /sair é tratado aqui e não entra na fila, pois não precisa do agente
@@ -56,6 +92,7 @@ async def enqueue(chat_id: str, content: str, message_id: str | None = None) -> 
 
     # RF10: usuário não autenticado recebe link de onboarding e a mensagem é descartada
     if not await is_authenticated(chat_id):
+        access_log_service.log_event(chat_id, "denied", provider=provider, detail="nao_autenticado")
         link = await generate_onboarding_link(chat_id)
         await enviar_texto_async(
             chat_id,
@@ -64,133 +101,199 @@ async def enqueue(chat_id: str, content: str, message_id: str | None = None) -> 
         )
         return
 
-    # RN06: incrementa contador diário antes de enfileirar;
-    # o TTL da chave Redis é ajustado para expirar à meia-noite BRT
+    # RN06: incrementa contador diário antes de enfileirar
     count = await increment_rate(chat_id)
     if count > MAX_DAILY_MESSAGES:
+        access_log_service.log_event(chat_id, "rate_limited", provider=provider)
         await enviar_texto_async(
             chat_id,
             "Você atingiu o limite de 25 mensagens por dia. Tente novamente amanhã.",
         )
         return
 
-    # RF11: persiste a mensagem na fila com status inicial 'pending'
-    async with AsyncSessionLocal() as session:
-        session.add(MessageQueue(chat_id=chat_id, content=content, status="pending"))
-        await session.commit()
-
+    item = {
+        "id": uuid.uuid4().hex,
+        "chat_id": chat_id,
+        "provider": provider,
+        "content": content,
+        "enqueued_at": datetime.now(timezone.utc).isoformat(),
+        "attempts": 0,
+    }
+    await get_redis().lpush(PENDING, _dumps(item))
     logger.info("QUEUE", f"Enfileirado — chat_id={chat_id}")
 
 
-async def _process_message(msg_id: int, chat_id: str, content: str) -> None:
+async def _process_item(raw: str) -> None:
     """
-    Processa uma única mensagem da fila.
+    Atende um item já movido para 'processing'.
 
-    Fluxo:
-      1. Marca como 'processing' (impede que process_next() a pegue novamente).
-      2. Chama o roteador de mensagens (RAG / agente).
-      3. Envia a resposta via WAHA.
-      4. Atualiza status para 'completed' ou 'failed' com detalhes do erro.
-
-    A re-busca do registro antes de atualizar o status garante que a sessão
-    SQLAlchemy não fique aberta durante o processamento (que pode demorar).
+    Sucesso: remove de processing/started. Erro: move para 'failed'.
+    Se o item já não está em processing (cleanup_stale o devolveu/falhou
+    durante o atendimento), apenas ignora o desfecho.
     """
-    # Marca como 'processing' em sessão separada para liberar o lock rapidamente
-    async with AsyncSessionLocal() as session:
-        msg = await session.get(MessageQueue, msg_id)
-        if not msg or msg.status != "pending":
-            # Mensagem pode ter sido cancelada ou já processada por outra task
-            return
-        msg.status = "processing"
-        msg.updated_at = datetime.now(timezone.utc)
-        await session.commit()
+    r = get_redis()
+    item = json.loads(raw)
+    chat_id, item_id = item["chat_id"], item["id"]
+    await r.hset(STARTED, item_id, str(time.time()))
 
+    lock = _chat_locks.setdefault(chat_id, asyncio.Lock())
+    t0 = time.monotonic()
+    error: str | None = None
+    resposta: str | None = None
+    async with lock:
+        try:
+            logger.incoming(chat_id, item["content"])
+            await iniciar_digitacao_async(chat_id)  # "digitando..." durante o LLM
+            resposta, _ = await route(chat_id, item["content"])
+
+            profile = await get_profile(chat_id)
+            if profile and profile.get("nome"):
+                resposta = f"{profile['nome'].split()[0]}, {resposta}"
+
+            logger.response_log(resposta)
+            await enviar_texto_async(chat_id, resposta)
+        except Exception as e:
+            error = f"{type(e).__name__}: {e}"[:300]
+            logger.error("QUEUE", f"Erro ao processar id={item_id} chat_id={chat_id}: {e}")
+    if not _chat_locks[chat_id].locked() and not getattr(_chat_locks[chat_id], "_waiters", None):
+        _chat_locks.pop(chat_id, None)
+
+    duration_ms = int((time.monotonic() - t0) * 1000)
+    removed = await r.lrem(PROCESSING, 1, raw)
+    await r.hdel(STARTED, item_id)
+
+    if error is None:
+        access_log_service.log_event(chat_id, "answered", provider=item.get("provider"), duration_ms=duration_ms)
+        item["response"] = (resposta or "")[:DONE_RESPONSE_MAX]
+        item["answered_at"] = datetime.now(timezone.utc).isoformat()
+        item["duration_ms"] = duration_ms
+        await r.lpush(DONE, _dumps(item))
+        await r.ltrim(DONE, 0, DONE_MAX - 1)
+        return
+    access_log_service.log_event(chat_id, "failed", provider=item.get("provider"),
+                                 detail=error.split(":", 1)[0], duration_ms=duration_ms)
+    if removed:  # se não estava mais em processing, o cleanup já decidiu o destino
+        item["error"] = error
+        await _push_failed(item)
+
+
+async def _push_failed(item: dict) -> None:
+    r = get_redis()
+    await r.lpush(FAILED, _dumps(item))
+    await r.ltrim(FAILED, 0, FAILED_MAX - 1)
+
+
+async def process_next(timeout: float = 1) -> None:
+    """
+    Pega o próximo item de 'pending' (BLMOVE pending → processing, RIGHT LEFT)
+    e o atende. Retorna ao estourar o timeout se a fila estiver vazia.
+
+    Chamado em loop por cada um dos QUEUE_CONSUMERS consumidores (main.py).
+    """
+    raw = await get_redis().blmove(PENDING, PROCESSING, timeout, "RIGHT", "LEFT")
+    if raw is None:
+        return
     try:
-        logger.incoming(chat_id, content)
-        await iniciar_digitacao_async(chat_id)  # mostra "digitando..." durante o processamento do LLM
-        resposta, _ = await route(chat_id, content)
-
-        profile = await get_profile(chat_id)
-        if profile and profile.get("nome"):
-            primeiro_nome = profile["nome"].split()[0]
-            resposta = f"{primeiro_nome}, {resposta}"
-
-        logger.response_log(resposta)
-        await enviar_texto_async(chat_id, resposta)
-        status, error_detail = "completed", None
-    except Exception as e:
-        logger.error("QUEUE", f"Erro ao processar id={msg_id} chat_id={chat_id}: {e}")
-        status, error_detail = "failed", str(e)
-
-    # Atualiza o status final em nova sessão após o processamento
-    async with AsyncSessionLocal() as session:
-        msg = await session.get(MessageQueue, msg_id)
-        if msg:
-            msg.status = status
-            msg.error_detail = error_detail
-            msg.updated_at = datetime.now(timezone.utc)
-            await session.commit()
+        await _process_item(raw)
+    except Exception as e:  # item corrompido etc.; cleanup_stale/recover cuidam do resto
+        logger.error("QUEUE", f"Falha inesperada no consumidor: {e}")
 
 
-async def process_next() -> None:
-    """
-    Seleciona e dispara o processamento das próximas mensagens pendentes.
-
-    Estratégia (RN08):
-    - Exclui chat_ids que já têm uma mensagem em 'processing' (garante FIFO por chat_id).
-    - Para os demais, pega a mensagem mais antiga de cada chat_id.
-    - Processa todos os chat_ids elegíveis em paralelo com asyncio.gather.
-
-    Chamado a cada 1s pelo _queue_worker em main.py.
-    """
-    async with AsyncSessionLocal() as session:
-        # Descobre quais chat_ids já estão sendo processados no momento
-        busy_result = await session.execute(
-            select(MessageQueue.chat_id).where(MessageQueue.status == "processing")
-        )
-        busy = {row[0] for row in busy_result.fetchall()}
-
-        # Busca pendentes excluindo chat_ids ocupados, ordenados por criação (FIFO)
-        q = select(MessageQueue).where(MessageQueue.status == "pending")
-        if busy:
-            q = q.where(MessageQueue.chat_id.not_in(busy))
-        q = q.order_by(MessageQueue.created_at.asc())
-
-        pending = (await session.execute(q)).scalars().all()
-
-    # Seleciona apenas a primeira mensagem de cada chat_id (a mais antiga)
-    seen: set[str] = set()
-    tasks = []
-    for msg in pending:
-        if msg.chat_id not in seen:
-            seen.add(msg.chat_id)
-            tasks.append(asyncio.create_task(_process_message(msg.id, msg.chat_id, msg.content)))
-
-    # return_exceptions=True evita que uma falha numa task cancele as demais
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+async def recover_processing() -> int:
+    """Na subida: devolve tudo que sobrou em 'processing' (queda no meio) para 'pending'."""
+    r = get_redis()
+    n = 0
+    while await r.lmove(PROCESSING, PENDING, "LEFT", "RIGHT") is not None:
+        n += 1
+    await r.delete(STARTED)
+    if n:
+        logger.warn("QUEUE", f"Recuperados {n} item(ns) de 'processing'")
+    return n
 
 
 async def cleanup_stale() -> None:
     """
-    Marca como 'failed' mensagens que ficaram travadas em 'processing' por tempo
-    superior a QUEUE_TIMEOUT_MINUTES (RN07).
-
-    Isso cobre cenários de crash da task ou timeout no agente sem tratamento de exceção.
-    Chamado a cada 60s pelo _stale_cleaner em main.py.
+    Trata itens parados em 'processing' há mais de QUEUE_TIMEOUT_MINUTES (RN07):
+    volta para 'pending' (attempts+1) enquanto attempts < QUEUE_MAX_ATTEMPTS;
+    senão vai para 'failed' com error='timeout'. Chamado a cada 60s.
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=QUEUE_TIMEOUT_MINUTES)
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(MessageQueue)
-            .where(MessageQueue.status == "processing")
-            .where(MessageQueue.updated_at < cutoff)
-        )
-        stale = result.scalars().all()
-        for msg in stale:
-            msg.status = "failed"
-            msg.error_detail = "timeout"
-            msg.updated_at = datetime.now(timezone.utc)
-            logger.warn("QUEUE", f"Timeout — id={msg.id} chat_id={msg.chat_id}")
-        if stale:
-            await session.commit()
+    r = get_redis()
+    limit = QUEUE_TIMEOUT_MINUTES * 60
+    now = time.time()
+    started = await r.hgetall(STARTED)
+    for raw in await r.lrange(PROCESSING, 0, -1):
+        item = json.loads(raw)
+        ts = started.get(item["id"])
+        if ts is not None:
+            age = now - float(ts)
+        else:  # ainda sem registro de início: usa a hora de entrada
+            age = now - datetime.fromisoformat(item["enqueued_at"]).timestamp()
+        if age <= limit:
+            continue
+        if not await r.lrem(PROCESSING, 1, raw):
+            continue  # outro consumidor concluiu no meio
+        await r.hdel(STARTED, item["id"])
+        item["attempts"] = item.get("attempts", 0) + 1
+        if item["attempts"] < QUEUE_MAX_ATTEMPTS:
+            await r.rpush(PENDING, _dumps(item))  # direita = próximo a ser consumido
+            logger.warn("QUEUE", f"Timeout, reenfileirado — id={item['id']} chat_id={item['chat_id']}")
+        else:
+            item["error"] = "timeout"
+            await _push_failed(item)
+            access_log_service.log_event(item["chat_id"], "failed", provider=item.get("provider"), detail="timeout")
+            logger.warn("QUEUE", f"Timeout, falhou — id={item['id']} chat_id={item['chat_id']}")
+
+
+# ── API para o painel admin ──────────────────────────────────────────────────
+
+async def stats() -> dict:
+    r = get_redis()
+    return {
+        "pending": await r.llen(PENDING),
+        "processing": await r.llen(PROCESSING),
+        "failed": await r.llen(FAILED),
+        "done": await r.llen(DONE),
+    }
+
+
+async def list_items(which: str, limit: int = 200) -> list[dict]:
+    """Itens da lista (pending: o mais antigo primeiro; demais: mais recente primeiro)."""
+    key = _KEYS.get(which)
+    if key is None:
+        raise ValueError(which)
+    r = get_redis()
+    raws = await r.lrange(key, 0, limit - 1)
+    if which == "pending":
+        raws = list(reversed(await r.lrange(key, -limit, -1)))
+    items = [json.loads(x) for x in raws]
+    if which == "processing":
+        started = await r.hgetall(STARTED)
+        for it in items:
+            it["started_at"] = started.get(it["id"])
+    return items
+
+
+async def _find(key: str, item_id: str) -> str | None:
+    for raw in await get_redis().lrange(key, 0, -1):
+        if json.loads(raw)["id"] == item_id:
+            return raw
+    return None
+
+
+async def cancel(item_id: str) -> bool:
+    """Cancela um item ainda pendente. False se não existe/já foi pego."""
+    raw = await _find(PENDING, item_id)
+    return bool(raw and await get_redis().lrem(PENDING, 1, raw))
+
+
+async def requeue(item_id: str) -> bool:
+    """Devolve um item de 'failed' para 'pending' com attempts=0."""
+    r = get_redis()
+    raw = await _find(FAILED, item_id)
+    if not raw or not await r.lrem(FAILED, 1, raw):
+        return False
+    item = json.loads(raw)
+    item["attempts"] = 0
+    item.pop("error", None)
+    await r.lpush(PENDING, _dumps(item))
+    return True
