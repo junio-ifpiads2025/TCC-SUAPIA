@@ -23,7 +23,7 @@ from typing import Any
 from openai import OpenAI
 from dotenv import load_dotenv
 
-from services import knowledge_service, logger, prompt_service, skill_service
+from services import knowledge_service, logger, prompt_service, skill_service, usage_service
 from services.mcp_client import SUAPMCPClient
 from config import AGENT_NAME
 
@@ -187,6 +187,7 @@ class AgentOrchestrator:
                 tools=tools,
                 tool_choice="auto",
             )
+            usage_service.record("agent", MODELO_LLM_AGENTE, response.usage)
 
             msg = response.choices[0].message
 
@@ -241,6 +242,7 @@ class AgentOrchestrator:
             model=MODELO_LLM_AGENTE,
             messages=messages,
         )
+        usage_service.record("agent", MODELO_LLM_AGENTE, final.usage)
         return final.choices[0].message.content or "", rag_metadata
 
     def _run_rag(self, query: str, rag_metadata: list[dict]) -> str:

@@ -103,3 +103,76 @@ def test_disabled_without_password_or_secret(client, monkeypatch):
     monkeypatch.setattr(admin_common, "ADMIN_PASSWORD", "pw")
     monkeypatch.setattr(admin_common, "ADMIN_SESSION_SECRET", "")
     assert client.get("/admin").status_code == 503
+
+
+# ── login por matrícula SUAP ─────────────────────────────────────────────────
+
+def _suap(monkeypatch, admins=("2024001",), valid=True):
+    from services import admin_user_service, auth_service
+
+    async def is_admin(m):
+        return m in admins
+
+    async def verify(m, s):
+        return valid
+
+    monkeypatch.setattr(admin_user_service, "is_admin", is_admin)
+    monkeypatch.setattr(auth_service, "verify_suap_credentials", verify)
+
+
+def test_suap_admin_login_ok(client, monkeypatch):
+    _suap(monkeypatch)
+    r = client.post("/admin/login", data={"username": "2024001", "password": "senha-suap"})
+    assert r.status_code == 303 and r.headers["location"] == "/admin"
+    assert client.get("/admin").status_code == 200
+
+
+def test_suap_login_wrong_password(client, monkeypatch):
+    _suap(monkeypatch, valid=False)
+    r = client.post("/admin/login", data={"username": "2024001", "password": "x"})
+    assert r.status_code == 401 and "set-cookie" not in r.headers
+
+
+def test_suap_login_not_admin_never_hits_suap(client, monkeypatch):
+    from services import auth_service
+    _suap(monkeypatch)
+
+    async def boom(m, s):
+        raise AssertionError("não deveria consultar o SUAP")
+
+    monkeypatch.setattr(auth_service, "verify_suap_credentials", boom)
+    r = client.post("/admin/login", data={"username": "9999999", "password": "x"})
+    assert r.status_code == 401
+
+
+def test_suap_unavailable(client, monkeypatch):
+    from services import auth_service
+    _suap(monkeypatch)
+
+    async def down(m, s):
+        return None
+
+    monkeypatch.setattr(auth_service, "verify_suap_credentials", down)
+    assert client.post("/admin/login", data={"username": "2024001", "password": "x"}).status_code == 503
+
+
+def test_removed_admin_loses_session(client, monkeypatch):
+    admins = ["2024001"]
+    _suap(monkeypatch, admins=admins)
+    client.post("/admin/login", data={"username": "2024001", "password": "s"})
+    assert client.get("/admin").status_code == 200
+    admins.clear()
+    r = client.get("/admin")
+    assert r.status_code == 303 and r.headers["location"] == "/admin/login"
+    assert client.get("/admin/login").status_code == 200  # sem loop de redirect
+
+
+def test_bootstrap_session_skips_db(client, monkeypatch):
+    from services import admin_user_service
+
+    async def boom(m):
+        raise AssertionError("bootstrap não consulta o banco")
+
+    login(client)
+    monkeypatch.setattr(admin_user_service, "is_admin", boom)
+    assert client.get("/admin").status_code == 200

@@ -21,13 +21,14 @@
     </div>
     {% if error %}<div class="alert alert-danger py-2 small" role="alert"><i class="bi bi-exclamation-triangle me-1"></i>{{ error }}</div>{% endif %}
     <div class="form-floating mb-3">
-      <input class="form-control" id="username" name="username" placeholder="Usuário" autocomplete="username" required autofocus>
-      <label for="username">Usuário</label>
+      <input class="form-control" id="username" name="username" placeholder="Matrícula SUAP" autocomplete="username" required autofocus>
+      <label for="username">Matrícula SUAP</label>
     </div>
     <div class="form-floating mb-4">
-      <input class="form-control" id="password" name="password" type="password" placeholder="Senha" autocomplete="current-password" required>
-      <label for="password">Senha</label>
+      <input class="form-control" id="password" name="password" type="password" placeholder="Senha do SUAP" autocomplete="current-password" required>
+      <label for="password">Senha do SUAP</label>
     </div>
+    <p class="text-body-secondary small mb-4">Use sua matrícula e senha do SUAP. O acesso é concedido por um administrador.</p>
     <button type="submit" class="btn btn-primary btn-lg w-100"><i class="bi bi-box-arrow-in-right me-1"></i>Entrar</button>
   </form>
 </body>

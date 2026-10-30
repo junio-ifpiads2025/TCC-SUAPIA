@@ -11,6 +11,8 @@ Tabelas gerenciadas aqui:
 - access_log    : log de acesso/atendimento (painel admin).
 - prompt_version: versões do system prompt (painel admin).
 - guardrail     : regras de entrada/saída/prompt (painel admin).
+- admin_user    : matrículas SUAP com acesso ao painel admin.
+- llm_usage     : consumo de tokens por chamada à API do LLM.
 """
 
 from datetime import datetime, timezone
@@ -165,6 +167,29 @@ class Guardrail(Base):
     priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class AdminUser(Base):
+    """Matrícula SUAP autorizada a entrar no painel (além do login de bootstrap do .env)."""
+    __tablename__ = "admin_user"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    matricula: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
+    added_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class LlmUsage(Base):
+    """Uma chamada à API do LLM: tokens consumidos, modelo e origem (agent/rag)."""
+    __tablename__ = "llm_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    model: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
 async def init_db() -> None:

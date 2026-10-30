@@ -9,14 +9,16 @@ from fastapi import APIRouter
 
 from routes import (
     admin_access,
+    admin_admins,
     admin_auth,
     admin_knowledge,
     admin_logs,
     admin_prompt,
     admin_queue,
     admin_skills,
+    admin_usage,
 )
 
 router = APIRouter()
-for _m in (admin_auth, admin_queue, admin_prompt, admin_skills, admin_knowledge, admin_access, admin_logs):
+for _m in (admin_auth, admin_queue, admin_prompt, admin_skills, admin_knowledge, admin_access, admin_logs, admin_usage, admin_admins):
     router.include_router(_m.router)

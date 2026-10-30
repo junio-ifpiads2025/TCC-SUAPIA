@@ -120,6 +120,26 @@ async def login_with_suap(
     return LoginResult(success=True, message="Login realizado com sucesso! Pode voltar ao WhatsApp.", nome=nome)
 
 
+async def verify_suap_credentials(matricula: str, senha: str) -> bool | None:
+    """
+    Confere matrícula e senha no SUAP sem criar sessão nem gravar nada (login do painel admin).
+
+    True = credenciais válidas, False = inválidas, None = SUAP indisponível/resposta inesperada.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{SUAP_BASE_URL}/api/token/pair", json={"username": matricula, "password": senha})
+    except httpx.RequestError:
+        return None
+    if resp.status_code == 200:
+        return bool(resp.json().get("access"))
+    if resp.status_code == 401:
+        return False
+    logger.warn("AUTH", f"SUAP retornou status inesperado no login admin: {resp.status_code}")
+    return None
+
+
 async def logout(chat_id: str) -> None:
     """Remove o token do Redis, encerrando a sessão do usuário."""
     await delete_token(chat_id)

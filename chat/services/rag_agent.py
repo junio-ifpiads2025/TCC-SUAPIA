@@ -3,7 +3,7 @@ from openai import OpenAI
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 from dotenv import load_dotenv
-from services import logger, prompt_service
+from services import logger, prompt_service, usage_service
 
 load_dotenv()
 
@@ -74,6 +74,7 @@ def gerar_resposta_com_contexto(pergunta: str):
             ],
             temperature=TEMPERATURE,
         )
+        usage_service.record("rag", MODELO_LLM, res_openai.usage)
         resposta_final_texto = res_openai.choices[0].message.content
         logger.success("LLM", "Resposta gerada com sucesso.")
         return resposta_final_texto, contexto, metadados
@@ -110,6 +111,7 @@ def gerar_resposta(pergunta: str):
             ],
             temperature=TEMPERATURE,
         )
+        usage_service.record("rag", MODELO_LLM, res_openai.usage)
 
         resposta_final_texto = res_openai.choices[0].message.content
         logger.success("LLM", "Resposta gerada com sucesso.")

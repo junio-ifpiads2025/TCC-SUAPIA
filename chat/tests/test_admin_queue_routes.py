@@ -48,16 +48,18 @@ def test_requires_auth(client):
 def test_page_and_tabs(client):
     _seed(client, qs.PENDING)
     r = client.get("/admin/queue")
-    assert r.status_code == 200 and "u1" in r.text and "every 5s" in r.text
+    assert r.status_code == 200 and "every 5s" in r.text
     assert client.get("/admin/queue/table?which=failed").status_code == 200
     assert client.get("/admin/queue?which=bogus").status_code == 400
 
 
-def test_xss_escaped(client):
-    _seed(client, qs.PENDING, content="<script>alert(1)</script>")
-    html = client.get("/admin/queue/table?which=pending").text
-    assert "<script>alert(1)</script>" not in html
-    assert "&lt;script&gt;" in html
+def test_nao_exibe_dados_pessoais(client):
+    _seed(client, qs.DONE, chat_id="5586999887766@c.us", content="<script>meu cpf 123</script>",
+          response="resposta secreta", duration_ms=1000)
+    html = client.get("/admin/queue/table?which=done").text
+    assert "5586999887766" not in html and "…7766" in html
+    assert "meu cpf" not in html and "<script>" not in html
+    assert "resposta secreta" not in html
 
 
 def test_cancel(client):

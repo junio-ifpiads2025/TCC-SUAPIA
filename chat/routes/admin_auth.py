@@ -3,20 +3,19 @@
 import logging
 import secrets
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from routes import admin_common
 from routes.admin_common import (
     clear_session_cookie,
     create_session_cookie,
-    get_session,
     render,
     require_admin,
     templates,
     verify_csrf,
 )
-from services import access_log_service
+from services import access_log_service, admin_user_service, auth_service
 from services.session_service import get_redis
 
 logger = logging.getLogger(__name__)
@@ -38,9 +37,11 @@ def _login_page(request: Request, error: str | None = None, status_code: int = 2
 @router.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     admin_common._check_enabled()
-    if get_session(request):
+    try:
+        await require_admin(request)  # sessão ainda válida (e admin ainda autorizado)
         return RedirectResponse("/admin", status_code=303)
-    return _login_page(request)
+    except HTTPException:
+        return _login_page(request)
 
 
 @router.post("/login")
@@ -56,9 +57,30 @@ async def login(request: Request, username: str = Form(""), password: str = Form
         logger.warning("Throttle de login indisponível (Redis).")
         redis = None
 
-    user_ok = secrets.compare_digest(username.encode(), admin_common.ADMIN_USERNAME.encode())
-    pass_ok = secrets.compare_digest(password.encode(), admin_common.ADMIN_PASSWORD.encode())
-    if not (user_ok and pass_ok):
+    username = username.strip()
+    bootstrap = (
+        secrets.compare_digest(username.encode(), admin_common.ADMIN_USERNAME.encode())
+        and secrets.compare_digest(password.encode(), admin_common.ADMIN_PASSWORD.encode())
+    )
+    ip = request.client.host if request.client else "unknown"
+    error = None
+    status = 401
+    if not bootstrap:
+        # matrícula SUAP: só admins cadastrados chegam a consultar o SUAP
+        try:
+            listed = bool(username) and await admin_user_service.is_admin(username)
+        except Exception:
+            logger.warning("Falha ao consultar admins.", exc_info=True)
+            listed = False
+        if listed:
+            valid = await auth_service.verify_suap_credentials(username, password)
+            if valid is None:
+                return _login_page(request, "O SUAP está inacessível no momento. Tente novamente.", 503)
+        else:
+            valid = False
+        if not valid:
+            error = "Matrícula ou senha inválidas, ou sem permissão de administrador."
+    if error:
         if redis is not None:
             try:
                 if await redis.incr(key) == 1:
@@ -66,19 +88,17 @@ async def login(request: Request, username: str = Form(""), password: str = Form
             except Exception:
                 logger.warning("Falha ao registrar tentativa de login.")
         # não grava o usuário digitado (pode ser senha no campo errado); só o IP
-        ip = request.client.host if request.client else "unknown"
         access_log_service.log_admin("unknown", "login_failed", f"ip={ip}")
-        return _login_page(request, "Usuário ou senha inválidos.", 401)
+        return _login_page(request, error, status)
 
     if redis is not None:
         try:
             await redis.delete(key)
         except Exception:
             pass
-    ip = request.client.host if request.client else "unknown"
-    access_log_service.log_admin(admin_common.ADMIN_USERNAME, "login", f"ip={ip}")
+    access_log_service.log_admin(username, "login", f"ip={ip}")
     response = RedirectResponse("/admin", status_code=303)
-    create_session_cookie(response, admin_common.ADMIN_USERNAME)
+    create_session_cookie(response, username, bootstrap=bootstrap)
     return response
 
 

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Administradores{% endblock %}
+{% block content %}
+<h1 class="h3 page-title mb-4">Administradores</h1>
+{% if msg %}<div class="alert {{ 'alert-danger' if msg.startswith('Erro') else 'alert-success' }} py-2">{{ msg }}</div>{% endif %}
+<div class="card mb-4"><div class="card-body">
+  <h2 class="h6 mb-3">Delegar acesso por matrícula SUAP</h2>
+  <form method="post" action="/admin/admins" class="row g-2">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="col-12 col-md-8"><input class="form-control" name="matricula" placeholder="Matrícula SUAP" required></div>
+    <div class="col-12 col-md-4 d-grid"><button class="btn btn-primary" type="submit"><i class="bi bi-person-plus me-1"></i>Adicionar</button></div>
+  </form>
+  <p class="small text-body-secondary mt-2 mb-0">O administrador entra em <code>/admin/login</code> com a própria matrícula e senha do SUAP. Remover a matrícula encerra o acesso na hora.</p>
+</div></div>
+<div class="card"><div class="table-responsive">
+  <table class="table mb-0">
+    <thead><tr><th>Matrícula</th><th>Adicionado por</th><th>Em</th><th></th></tr></thead>
+    <tbody>
+    {% for a in admins %}
+      <tr>
+        <td>{{ a.matricula }}{% if a.matricula == admin_user %} <span class="badge text-bg-secondary">você</span>{% endif %}</td>
+        <td>{{ a.added_by or '—' }}</td>
+        <td class="small text-body-secondary">{{ a.created_at.strftime('%d/%m/%Y %H:%M') if a.created_at else '' }}</td>
+        <td class="text-end">
+          {% if a.matricula != admin_user %}
+          <form method="post" action="/admin/admins/remove" class="m-0" onsubmit="return confirm('Remover {{ a.matricula }}?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="matricula" value="{{ a.matricula }}">
+            <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-trash"></i></button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="text-center text-body-secondary py-4">Nenhum administrador por matrícula. Só o login de bootstrap do .env tem acesso.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div></div>
+{% endblock %}

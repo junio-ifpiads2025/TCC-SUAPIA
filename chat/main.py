@@ -17,7 +17,7 @@ from routes.admin import router as admin_router
 from routes.auth import router as auth_router
 from routes.terms import router as terms_router
 from routes.webhook import router as webhook_router
-from services import access_log_service, acl_service, logger, prompt_service, skill_service
+from services import access_log_service, acl_service, logger, prompt_service, skill_service, usage_service
 from services import providers
 from services import queue_service
 from config import AGENT_NAME, QUEUE_CONSUMERS
@@ -58,6 +58,7 @@ async def lifespan(app: FastAPI):
     As tasks são criadas aqui para garantir que o event loop já está ativo.
     """
     await init_db()
+    usage_service.set_loop(asyncio.get_running_loop())
     logger.success("BOOT", "Banco de dados inicializado")
 
     # Caches em memória (ACL, prompt ativo, guardrails): carregados do Postgres na subida

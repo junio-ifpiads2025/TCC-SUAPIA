@@ -2,7 +2,8 @@
 Peças compartilhadas do painel admin: templates Jinja2, sessão e CSRF.
 
 Contrato usado por todos os routers do painel (routes/admin_*.py):
-- `require_admin`  : dependência FastAPI; devolve o nome do admin logado.
+- `require_admin`  : dependência FastAPI; devolve o admin logado (matrícula SUAP ou
+                     o usuário de bootstrap do .env).
 - `verify_csrf`    : dependência para todo POST/PUT/DELETE de formulário/HTMX.
 - `render(request, template, **ctx)` : renderiza web/admin/<template> com
   `request`, `csrf_token` e `admin_user` já no contexto.
@@ -19,6 +20,7 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 import config
+from services import admin_user_service
 from config import ADMIN_PASSWORD, ADMIN_SESSION_SECRET, ADMIN_SESSION_TTL_SECONDS, ADMIN_USERNAME  # noqa: F401
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "web" / "admin"
@@ -38,10 +40,15 @@ def _check_enabled() -> None:
         raise HTTPException(status_code=503, detail="Painel desabilitado: configure ADMIN_PASSWORD e ADMIN_SESSION_SECRET.")
 
 
-def create_session_cookie(response: Response, username: str) -> None:
-    """Grava o cookie de sessão assinado (usuário + token CSRF novo)."""
+def create_session_cookie(response: Response, username: str, bootstrap: bool = False) -> None:
+    """
+    Grava o cookie de sessão assinado (usuário + token CSRF novo).
+
+    `bootstrap` marca o login de emergência do .env; os demais são matrículas SUAP,
+    revalidadas contra a tabela de admins a cada requisição.
+    """
     _check_enabled()
-    value = _serializer().dumps({"u": username, "csrf": secrets.token_urlsafe(32)})
+    value = _serializer().dumps({"u": username, "csrf": secrets.token_urlsafe(32), "b": bootstrap})
     response.set_cookie(
         COOKIE_NAME,
         value,
@@ -75,14 +82,27 @@ def get_session(request: Request) -> dict | None:
     return data
 
 
-def require_admin(request: Request) -> str:
+async def require_admin(request: Request) -> str:
     _check_enabled()
     session = get_session(request)
+    # admin removido da lista perde o acesso mesmo com o cookie ainda válido
+    if session is not None and not session.get("b"):
+        try:
+            if not await admin_user_service.is_admin(session["u"]):
+                session = None
+                request.state.admin_session = None
+        except Exception:
+            session = None
     if session is None:
         if request.url.path.startswith("/admin/api/"):
             raise HTTPException(status_code=401, detail="Não autenticado.")
         raise HTTPException(status_code=303, headers={"Location": "/admin/login"})
     return session["u"]
+
+
+def is_bootstrap(request: Request) -> bool:
+    session = get_session(request)
+    return bool(session and session.get("b"))
 
 
 async def verify_csrf(request: Request) -> None:
@@ -102,4 +122,5 @@ def render(request: Request, template: str, status_code: int = 200, **ctx) -> HT
     session = get_session(request)
     ctx.setdefault("csrf_token", session["csrf"] if session else "")
     ctx.setdefault("admin_user", session["u"] if session else "admin")
+    ctx.setdefault("is_bootstrap", bool(session and session.get("b")))
     return templates.TemplateResponse(request, template, ctx, status_code=status_code)
