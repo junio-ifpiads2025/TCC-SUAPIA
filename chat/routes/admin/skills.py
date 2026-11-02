@@ -5,7 +5,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from routes.admin.common import render, require_admin, verify_csrf
-from services.shared import access_log_service
 from services.shared import guardrail_service as gs
 from services.shared import skill_service
 
@@ -52,7 +51,6 @@ async def skill_create(
         await skill_service.create_skill(slug, data)
     except skill_service.SkillError as e:
         return await _page(request, 422, error=str(e))
-    access_log_service.log_admin(admin, "skill_create", f"skill={slug.strip()}")
     return RedirectResponse("/admin/skills?msg=skill+criada", status_code=303)
 
 
@@ -63,7 +61,6 @@ async def skill_delete(request: Request, slug: str, admin: str = Depends(require
         await skill_service.delete_skill(slug)
     except skill_service.SkillNotFound:
         return await _page(request, 404, error="Skill não encontrada.")
-    access_log_service.log_admin(admin, "skill_delete", f"skill={slug}")
     return RedirectResponse("/admin/skills?msg=skill+removida", status_code=303)
 
 
@@ -79,7 +76,6 @@ async def skill_update(
         return await _page(request, 422, error=str(e), skill=slug)
     except skill_service.SkillNotFound:
         return await _page(request, 404, error="Skill não encontrada.")
-    access_log_service.log_admin(admin, "skill_update", f"skill={slug}")
     return RedirectResponse(f"/admin/skills?skill={slug}&msg=skill+atualizada", status_code=303)
 
 
@@ -96,7 +92,6 @@ async def guardrail_create(
         await gs.create_rule(data)
     except gs.GuardrailError as e:
         return await _page(request, 422, error=str(e))
-    access_log_service.log_admin(admin, "guardrail_create", f"action={action}")
     return RedirectResponse("/admin/skills?msg=criado", status_code=303)
 
 
@@ -107,7 +102,6 @@ async def guardrail_delete(request: Request, rule_id: int, admin: str = Depends(
         await gs.delete_rule(rule_id)
     except gs.GuardrailNotFound:
         return await _page(request, 404, error="Regra não encontrada.")
-    access_log_service.log_admin(admin, "guardrail_delete", f"rule={rule_id}")
     return RedirectResponse("/admin/skills?msg=removido", status_code=303)
 
 
@@ -127,7 +121,6 @@ async def guardrail_update(
         return await _page(request, 422, error=str(e))
     except gs.GuardrailNotFound:
         return await _page(request, 404, error="Regra não encontrada.")
-    access_log_service.log_admin(admin, "guardrail_update", f"rule={rule_id}")
     return RedirectResponse("/admin/skills?msg=atualizado", status_code=303)
 
 

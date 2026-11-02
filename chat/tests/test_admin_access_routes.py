@@ -2,9 +2,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from routes import admin_access, admin_logs
-from routes.admin_common import require_admin, verify_csrf
-from services import acl_service as acl, access_log_service as als
+from routes.admin import access as admin_access, logs as admin_logs
+from routes.admin.common import require_admin, verify_csrf
+from services.shared import acl_service as acl, access_log_service as als
 
 
 @pytest.fixture

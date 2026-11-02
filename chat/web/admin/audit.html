@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% from "_help.html" import help %}
+{% block title %}Auditoria{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 page-title mb-0">Auditoria {{ help('Registro de cada alteração feita no painel: quem mudou, o quê, quando, e como estava antes e depois. Use Reverter para desfazer uma alteração; a reversão também fica registrada aqui.') }}</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="/admin/export/audit.csv?{{ {'admin_filter': admin_filter, 'entity': entity, 'date_from': date_from, 'date_to': date_to} | urlencode }}"><i class="bi bi-filetype-csv me-1"></i>Exportar CSV</a>
+</div>
+{% if msg %}<div class="alert {{ 'alert-danger' if msg.startswith('Erro') else 'alert-success' }} py-2">{{ msg }}</div>{% endif %}
+<form method="get" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-12 col-md-3">
+      <label class="form-label small mb-1">Administrador</label>
+      <input class="form-control" name="admin_filter" value="{{ admin_filter }}" placeholder="Matrícula ou usuário">
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label small mb-1">Área</label>
+      <select class="form-select" name="entity">
+        <option value="">Todas</option>
+        {% for e in entities %}<option value="{{ e }}" {{ 'selected' if e == entity else '' }}>{{ e }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label small mb-1">De</label>
+      <input class="form-control" type="date" name="date_from" value="{{ date_from }}">
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label small mb-1">Até</label>
+      <input class="form-control" type="date" name="date_to" value="{{ date_to }}">
+    </div>
+    <div class="col-12 col-md-2 d-grid">
+      <button class="btn btn-primary" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+    </div>
+  </div>
+</form>
+
+<div class="card">
+  <div class="table-responsive">
+  <table class="table mb-0">
+    <thead><tr><th>Quando</th><th>Admin</th><th>Área</th><th>Ação</th><th>Item</th><th>Mudanças</th><th></th></tr></thead>
+    <tbody>
+    {% for e in entries %}
+    <tr>
+      <td class="text-nowrap small">{{ e.created_at.strftime('%d/%m/%Y %H:%M:%S') if e.created_at else '' }}</td>
+      <td>{{ e.admin }}</td>
+      <td><span class="badge text-bg-secondary">{{ e.entity }}</span></td>
+      <td><span class="badge text-bg-info">{{ e.action }}</span></td>
+      <td class="small text-break">{{ e.entity_id or '—' }}</td>
+      <td class="small" style="min-width: 18rem">
+        {% if e.changes %}
+        <details>
+          <summary>{{ e.changes | map(attribute='field') | join(', ') }}</summary>
+          {% for c in e.changes %}
+          <div class="mt-2"><strong>{{ c.field }}</strong></div>
+          <div class="text-danger-emphasis bg-danger-subtle rounded px-2 py-1 mb-1 text-break" style="white-space: pre-wrap">{{ (c.before | string | truncate(600)) if c.before is not none else '∅' }}</div>
+          <div class="text-success-emphasis bg-success-subtle rounded px-2 py-1 text-break" style="white-space: pre-wrap">{{ (c.after | string | truncate(600)) if c.after is not none else '∅' }}</div>
+          {% endfor %}
+        </details>
+        {% else %}<span class="text-body-secondary">sem diferenças</span>{% endif %}
+      </td>
+      <td class="text-end text-nowrap">
+        {% if e.reverted_by %}
+        <span class="small text-body-secondary">revertida por {{ e.reverted_by }}</span>
+        {% elif e.entity not in revertible %}
+        <span class="small text-body-secondary">não reversível</span>
+        {% else %}
+        <form method="post" action="/admin/audit/{{ e.id }}/revert" class="m-0" onsubmit="return confirm('Reverter esta alteração?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn btn-sm btn-outline-warning" type="submit"><i class="bi bi-arrow-counterclockwise me-1"></i>Reverter</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="text-center text-body-secondary py-4">Nenhuma alteração registrada.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<nav class="d-flex justify-content-between align-items-center mt-3">
+  <div>{% if prev_url %}<a class="btn btn-sm btn-outline-secondary" href="{{ prev_url }}"><i class="bi bi-chevron-left"></i> Anterior</a>{% endif %}</div>
+  <span class="small text-body-secondary">Página {{ page }}</span>
+  <div>{% if next_url %}<a class="btn btn-sm btn-outline-secondary" href="{{ next_url }}">Próxima <i class="bi bi-chevron-right"></i></a>{% endif %}</div>
+</nav>
+{% endblock %}

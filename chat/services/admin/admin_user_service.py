@@ -5,6 +5,7 @@ import re
 from sqlalchemy import delete, select
 
 from models.database import AdminUser, AsyncSessionLocal
+from services.shared import audit_service
 
 _MATRICULA = re.compile(r"^[0-9A-Za-z.\-]{3,30}$")
 
@@ -36,10 +37,14 @@ async def add_admin(matricula: str, added_by: str) -> str:
     async with AsyncSessionLocal() as s:
         s.add(AdminUser(matricula=matricula, added_by=added_by))
         await s.commit()
+    await audit_service.record("create", "admin_user", matricula, None, {"matricula": matricula})
     return matricula
 
 
 async def remove_admin(matricula: str) -> None:
+    matricula = matricula.strip()
     async with AsyncSessionLocal() as s:
-        await s.execute(delete(AdminUser).where(AdminUser.matricula == matricula.strip()))
+        res = await s.execute(delete(AdminUser).where(AdminUser.matricula == matricula))
         await s.commit()
+    if res.rowcount:
+        await audit_service.record("delete", "admin_user", matricula, {"matricula": matricula}, None)

@@ -12,7 +12,8 @@ def arun(fn):
 
 import pytest
 
-from services import access_log_service, guardrail_service as gs, message_router as mr
+from services.shared import access_log_service, guardrail_service as gs
+from services.chat import message_router as mr
 
 
 @pytest.fixture

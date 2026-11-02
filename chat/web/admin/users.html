@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_help.html" import help %}
+{% block title %}Usuários{% endblock %}
+{% block content %}
+<h1 class="h3 page-title mb-4">Usuários {{ help('Pessoas que já fizeram login no assistente. Busque pela matrícula ou pelo número e abra o detalhe para ver o uso, bloquear, mudar o limite ou apagar os dados a pedido da pessoa.') }}</h1>
+{% if msg %}<div class="alert {{ 'alert-danger' if msg.startswith('Erro') else 'alert-success' }} py-2">{{ msg }}</div>{% endif %}
+<form method="get" class="input-group mb-4">
+  <span class="input-group-text"><i class="bi bi-search"></i></span>
+  <input class="form-control" name="q" value="{{ q }}" placeholder="Matrícula ou número">
+  <button class="btn btn-outline-primary" type="submit">Buscar</button>
+</form>
+<div class="card">
+  <div class="table-responsive">
+  <table class="table table-hover mb-0">
+    <thead><tr><th>Matrícula</th><th>Número {{ help('Mostramos só os 4 últimos dígitos para proteger os dados pessoais.') }}</th><th>Termos</th><th>Acesso</th><th>Limite/dia</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.matricula }}</td>
+      <td>{{ u.masked }}</td>
+      <td class="small">{{ u.terms_accepted_at.strftime('%d/%m/%Y') if u.terms_accepted_at else '—' }}</td>
+      <td>{% if u.status == 'blocked' %}<span class="badge text-bg-danger">bloqueado</span>{% elif u.status == 'denied' %}<span class="badge text-bg-warning">sem permissão</span>{% else %}<span class="badge text-bg-success">liberado</span>{% endif %}</td>
+      <td>{{ u.daily_limit }}{% if u.own_limit is not none %} <span class="badge text-bg-secondary">próprio</span>{% endif %}</td>
+      <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/admin/users/{{ u.id }}">Detalhes</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="text-center text-body-secondary py-4">Nenhum usuário encontrado.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

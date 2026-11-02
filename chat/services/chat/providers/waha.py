@@ -56,3 +56,12 @@ class WahaProvider(MessagingProvider):
 
     async def iniciar_digitacao(self, chat_id: str) -> None:
         await waha_client.iniciar_digitacao_waha_async(chat_id)
+
+    async def health(self) -> tuple[bool, str]:
+        status = await waha_client.session_status_async()
+        if status is None:
+            return False, "WAHA inacessível"
+        return status == "WORKING", f"sessão: {status}"
+
+    async def reconnect(self) -> bool:
+        return await waha_client.restart_session_async()

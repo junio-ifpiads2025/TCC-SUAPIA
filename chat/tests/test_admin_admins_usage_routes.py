@@ -4,9 +4,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from routes import admin_admins, admin_logs, admin_usage
-from routes.admin_common import require_admin, verify_csrf
-from services import access_log_service, admin_user_service, pdf_report, usage_service
+from routes.admin import admins as admin_admins, logs as admin_logs, usage as admin_usage
+from routes.admin.common import require_admin, verify_csrf
+from services.shared import access_log_service, usage_service
+from services.admin import admin_user_service, pdf_report
 
 
 def _report(days=3):
@@ -122,7 +123,7 @@ def test_record_inserts(monkeypatch):
 
     monkeypatch.setattr(usage_service, "_insert", ins)
     asyncio.run(run())
-    assert rows == [{"source": "agent", "model": "gpt-4o", "prompt_tokens": 10,
+    assert rows == [{"source": "agent", "model": "gpt-4o", "chat_id": None, "prompt_tokens": 10,
                      "completion_tokens": 5, "total_tokens": 15}]
 
 

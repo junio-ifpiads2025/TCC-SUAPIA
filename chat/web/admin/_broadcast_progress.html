@@ -1,0 +1,11 @@
+{# Contadores de um envio; com status "sending" o próprio bloco se atualiza a cada 3 s. #}
+{% set pct = ((b.sent + b.failed) * 100 // b.total) if b.total else (100 if b.status == 'done' else 0) %}
+<div id="broadcast-progress"{% if b.status == 'sending' %} hx-get="/admin/broadcast/{{ b.id }}/progress" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  <div class="d-flex justify-content-between small mb-1">
+    <span>Situação: <span class="badge text-bg-{{ {'draft': 'secondary', 'sending': 'primary', 'done': 'success', 'cancelled': 'warning'}[b.status] }}">{{ b.status }}</span></span>
+    <span>{{ b.sent }} enviada(s) · {{ b.failed }} falha(s) · {{ b.total }} destinatário(s)</span>
+  </div>
+  <div class="progress" role="progressbar" aria-label="Progresso do envio" aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100" style="height: .75rem">
+    <div class="progress-bar{{ ' progress-bar-striped progress-bar-animated' if b.status == 'sending' else '' }}{{ ' bg-warning' if b.failed else '' }}" style="width: {{ pct }}%"></div>
+  </div>
+</div>

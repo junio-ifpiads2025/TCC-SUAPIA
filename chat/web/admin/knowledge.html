@@ -1,19 +1,20 @@
 {% extends "base.html" %}
+{% from "_help.html" import help %}
 {% block title %}Conhecimento{% endblock %}
 {% block content %}
-<h1 class="h3 page-title mb-4">Base de conhecimento</h1>
+<h1 class="h3 page-title mb-4">Base de conhecimento {{ help('Documentos com informações que o assistente consulta para responder, como regras, prazos e manuais. Quanto mais claro e atualizado o texto, melhor a resposta. O assistente não inventa o que não está aqui nem nas outras fontes dele.') }}</h1>
 <div id="msg" class="small text-body-secondary mb-2" role="status"></div>
 
 <div class="row g-3 mb-4">
   <div class="col-lg-7">
     <div class="card h-100"><div class="card-body">
-      <h2 class="h5" id="form-title">Novo documento</h2>
-      <input class="form-control mb-2" id="doc-title" placeholder="Título">
+      <h2 class="h5" id="form-title">Novo documento</h2>{{ help('Escreva ou cole o texto. Ao salvar, ele é dividido em pedaços pequenos para o assistente encontrar rápido o trecho certo.') }}
+      <input class="form-control mb-2" id="doc-title" placeholder="Título" value="{{ prefill_title or '' }}">
       <textarea class="form-control mb-3" id="doc-content" rows="8" placeholder="Conteúdo (máx. {{ max_chars }} caracteres)"></textarea>
       <button class="btn btn-primary" id="save"><i class="bi bi-save me-1"></i>Salvar</button>
       <button class="btn btn-secondary" id="cancel" style="display:none">Cancelar edição</button>
       <hr>
-      <label class="form-label small" for="file">Ou envie arquivo (.txt/.md)</label>
+      <label class="form-label small" for="file">Ou envie arquivo (.txt/.md)</label>{{ help('Em vez de digitar, envie um arquivo de texto simples (.txt) ou Markdown (.md). O título digitado acima é usado se houver.') }}
       <div class="input-group">
         <input class="form-control" type="file" id="file" accept=".txt,.md,text/plain,text/markdown">
         <button class="btn btn-outline-primary" id="upload"><i class="bi bi-upload me-1"></i>Enviar</button>
@@ -22,7 +23,7 @@
   </div>
   <div class="col-lg-5">
     <div class="card h-100"><div class="card-body">
-      <h2 class="h5"><i class="bi bi-search me-1"></i>Testar busca</h2>
+      <h2 class="h5"><i class="bi bi-search me-1"></i>Testar busca</h2>{{ help('Digite uma pergunta como um usuário faria e veja quais trechos dos documentos o assistente encontraria. Útil para conferir se o conteúdo está bem escrito.') }}
       <div class="input-group mb-3">
         <input class="form-control" id="q" placeholder="Pergunta">
         <button class="btn btn-outline-primary" id="search">Buscar</button>
@@ -32,10 +33,29 @@
   </div>
 </div>
 
+<div class="card mb-3"><div class="card-body">
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <h2 class="h6 mb-0 me-auto"><i class="bi bi-arrow-repeat me-1"></i>Reindexação {{ help('Gera de novo os pedaços (chunks) e a busca de todos os documentos. Use depois de mudar o modelo de busca ou se as respostas parecerem desatualizadas. O assistente continua funcionando durante o processo.') }}</h2>
+    <button class="btn btn-sm btn-outline-primary" id="reindex"><i class="bi bi-arrow-repeat me-1"></i>Reindexar tudo</button>
+  </div>
+  <div class="progress mt-3" role="progressbar" aria-label="Progresso da reindexação" style="height: .75rem">
+    <div class="progress-bar" id="reindex-bar" style="width: 0%"></div>
+  </div>
+  <div class="small text-body-secondary mt-1" id="reindex-status">Nenhuma reindexação recente.</div>
+</div></div>
+
+<div class="card mb-3" id="chunks-card" style="display:none"><div class="card-body">
+  <div class="d-flex align-items-center mb-2">
+    <h2 class="h6 mb-0 me-auto" id="chunks-title">Chunks</h2>
+    <button class="btn-close" id="chunks-close" aria-label="Fechar"></button>
+  </div>
+  <ol class="small mb-0" id="chunks-list"></ol>
+</div></div>
+
 <div class="card">
   <div class="table-responsive">
   <table class="table table-hover mb-0">
-    <thead><tr><th>Título</th><th>Chunks</th><th>Atualizado</th><th></th></tr></thead>
+    <thead><tr><th>Título</th><th>Chunks {{ help('Chunk é um pedaço do documento. O texto é dividido em partes para a busca ser rápida e precisa. Documentos maiores têm mais chunks.') }}</th><th>Atualizado</th><th></th></tr></thead>
     <tbody id="docs"></tbody>
   </table>
   </div>
@@ -82,6 +102,7 @@
       cell(tr, d.title); cell(tr, d.chunk_count); cell(tr, d.updated_at || d.created_at);
       const td = document.createElement('td');
       td.appendChild(btn('Editar', '', function () { edit(d.id); }));
+      td.appendChild(btn('Chunks', 'btn-outline-secondary', function () { showChunks(d.id, d.title); }));
       td.appendChild(btn('Excluir', 'btn-outline-danger', function () { remove(d.id, d.title); }));
       tr.appendChild(td); tbody.appendChild(tr);
     });
@@ -132,7 +153,47 @@
     } catch (e) { msg(e.message, true); }
   });
 
+  async function showChunks(id, title) {
+    try {
+      const chunks = await api('/admin/api/knowledge/' + encodeURIComponent(id) + '/chunks');
+      $('chunks-title').textContent = 'Chunks de "' + title + '" (' + chunks.length + ')';
+      const list = $('chunks-list'); list.replaceChildren();
+      chunks.forEach(function (c) {
+        const li = document.createElement('li'); li.className = 'mb-2';
+        li.style.whiteSpace = 'pre-wrap'; li.textContent = c.content;
+        list.appendChild(li);
+      });
+      $('chunks-card').style.display = ''; $('chunks-card').scrollIntoView({behavior: 'smooth'});
+    } catch (e) { msg(e.message, true); }
+  }
+  $('chunks-close').addEventListener('click', function () { $('chunks-card').style.display = 'none'; });
+
+  let reindexTimer = null, wasRunning = false;
+  async function reindexPoll() {
+    try {
+      const p = await api('/admin/api/knowledge/reindex');
+      const running = p.status === 'running';
+      $('reindex').disabled = running;
+      if (p.status === 'idle') return;
+      const pct = p.total ? Math.round(100 * (p.done + p.failed) / p.total) : 100;
+      $('reindex-bar').style.width = pct + '%';
+      $('reindex-bar').className = 'progress-bar' + (p.failed || p.status === 'error' ? ' bg-warning' : '') + (running ? ' progress-bar-striped progress-bar-animated' : '');
+      $('reindex-status').textContent = p.status === 'error' ? 'A reindexação foi interrompida por um erro.'
+        : (running ? 'Reindexando: ' : 'Concluída: ') + p.done + ' de ' + p.total + ' documento(s)' + (p.failed ? ', ' + p.failed + ' com falha' : '') + '.';
+      clearTimeout(reindexTimer);
+      if (running) reindexTimer = setTimeout(reindexPoll, 2000);
+      else if (wasRunning) await load();  // contagem de chunks mudou
+      wasRunning = running;
+    } catch (e) { msg(e.message, true); }
+  }
+  $('reindex').addEventListener('click', async function () {
+    if (!confirm('Reindexar todos os documentos?')) return;
+    try { await api('/admin/api/knowledge/reindex', {method: 'POST'}); await reindexPoll(); }
+    catch (e) { msg(e.message, true); }
+  });
+
   load().catch(function (e) { msg(e.message, true); });
+  reindexPoll();
 })();
 </script>
 {% endblock %}

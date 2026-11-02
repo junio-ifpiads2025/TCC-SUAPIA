@@ -1,13 +1,14 @@
 {% extends "base.html" %}
+{% from "_help.html" import help %}
 {% block title %}Resumo{% endblock %}
 {% block content %}
-<h1 class="h3 page-title mb-4">Resumo</h1>
+<h1 class="h3 page-title mb-4">Resumo {{ help('Visão geral do atendimento: quantas mensagens esperam resposta, quem pode usar o assistente e o que ele já respondeu hoje. Clique em um cartão para abrir a tela completa.') }}</h1>
 <div class="row g-3">
   <div class="col-12 col-md-6 col-xl-3">
     <div class="card h-100"><div class="card-body">
       <div class="d-flex align-items-center gap-3 mb-3">
         <div class="stat-icon bg-primary-subtle text-primary"><i class="bi bi-inbox"></i></div>
-        <h2 class="h6 mb-0">Fila de mensagens</h2>
+        <h2 class="h6 mb-0">Fila de mensagens {{ help('Quando alguém manda uma mensagem, ela entra numa fila até o assistente responder. Pendentes: esperando a vez. Processando: sendo respondidas agora. Falhas: deram erro e precisam de atenção.') }}</h2>
       </div>
       <ul class="list-unstyled mb-3">
         <li class="d-flex justify-content-between"><span class="text-body-secondary">Pendentes</span><strong>{{ queue.pending }}</strong></li>
@@ -21,7 +22,7 @@
     <div class="card h-100"><div class="card-body">
       <div class="d-flex align-items-center gap-3 mb-3">
         <div class="stat-icon bg-warning-subtle text-warning-emphasis"><i class="bi bi-person-lock"></i></div>
-        <h2 class="h6 mb-0">Controle de acesso</h2>
+        <h2 class="h6 mb-0">Controle de acesso {{ help('Lista de quem pode ou não conversar com o assistente. Liberados: números com permissão explícita. Bloqueados: números impedidos de usar.') }}</h2>
       </div>
       <ul class="list-unstyled mb-3">
         <li class="d-flex justify-content-between"><span class="text-body-secondary">Liberados</span><strong class="text-success">{{ acl.allow }}</strong></li>
@@ -34,7 +35,7 @@
     <div class="card h-100"><div class="card-body">
       <div class="d-flex align-items-center gap-3 mb-3">
         <div class="stat-icon bg-success-subtle text-success"><i class="bi bi-chat-dots"></i></div>
-        <h2 class="h6 mb-0">Respondidas hoje</h2>
+        <h2 class="h6 mb-0">Respondidas hoje {{ help('Quantidade de mensagens que o assistente já respondeu desde a meia-noite.') }}</h2>
       </div>
       <p class="display-5 fw-semibold mb-3">{{ answered }}</p>
       <a href="/admin/logs" class="stretched-link small">Ver logs <i class="bi bi-arrow-right"></i></a>
@@ -44,7 +45,7 @@
     <div class="card h-100"><div class="card-body">
       <div class="d-flex align-items-center gap-3 mb-3">
         <div class="stat-icon bg-info-subtle text-info-emphasis"><i class="bi bi-chat-square-text"></i></div>
-        <h2 class="h6 mb-0">Prompt ativo</h2>
+        <h2 class="h6 mb-0">Prompt ativo {{ help('O prompt é o texto de instruções que diz ao assistente quem ele é e como deve se comportar. Aqui aparece qual versão está em uso agora.') }}</h2>
       </div>
       {% if prompt %}
         <p class="mb-1">Versão <span class="badge text-bg-primary">#{{ prompt.id }}</span></p>
@@ -56,4 +57,94 @@
     </div></div>
   </div>
 </div>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-5 mb-3">
+  <h2 class="h5 page-title mb-0">Qualidade e desempenho {{ help('Indicadores do período escolhido: rapidez das respostas, erros, bloqueios por regras de segurança, satisfação dos usuários e custo estimado da IA.') }}</h2>
+  <div class="btn-group btn-group-sm" role="group" aria-label="Período">
+    {% for p in periods %}<a class="btn btn-outline-primary {{ 'active' if p == days else '' }}" href="/admin?days={{ p }}">{{ p }} dias</a>{% endfor %}
+  </div>
+</div>
+
+{% if metrics %}
+{% set t = metrics.totals %}
+{% macro pct(v) %}{{ ('%.1f'|format(v * 100)) ~ '%' if v is not none else '—' }}{% endmacro %}
+<div class="row g-3 mb-4">
+  {% for label, value, tip in [
+    ('Latência p95 (pior dia)', ('%.1f s'|format(t.p95_max / 1000)) if t.p95_max is not none else '—', '95% das respostas saíram em até este tempo, no dia mais lento do período.'),
+    ('Taxa de erro', pct(t.error_rate), 'Mensagens que falharam dividido pelo total de mensagens processadas.'),
+    ('Bloqueios de guardrail', t.guardrail, 'Mensagens ou respostas barradas pelas regras de segurança.'),
+    ('Usuários ativos', t.active_users, 'Pessoas diferentes que receberam pelo menos uma resposta no período.'),
+    ('Satisfação', pct(t.satisfaction), 'Avaliações 👍 dividido pelo total de avaliações (👍 + 👎).'),
+    ('Sem resposta', pct(t.no_answer_rate), 'Perguntas em que o assistente não encontrou resposta, sobre o total respondido.'),
+    ('Custo estimado', 'US$ %.2f'|format(t.cost), 'Estimativa pelos preços configurados por modelo (MODEL_PRICES_JSON).'),
+  ] %}
+  <div class="col-6 col-md-4 col-xl"><div class="card h-100"><div class="card-body">
+    <div class="small text-body-secondary">{{ label }} {{ help(tip) }}</div>
+    <div class="h4 mb-0">{{ value }}</div>
+  </div></div></div>
+  {% endfor %}
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-xl-6"><div class="card h-100"><div class="card-body">
+    <h3 class="h6">Tempo de resposta (segundos) {{ help('p50: metade das respostas foi mais rápida que isso. p95: só 5% foram mais lentas.') }}</h3><canvas id="chLatency" height="120"></canvas>
+  </div></div></div>
+  <div class="col-12 col-xl-6"><div class="card h-100"><div class="card-body">
+    <h3 class="h6">Respondidas, falhas e bloqueios {{ help('Por dia: mensagens respondidas, que falharam e barradas por guardrail.') }}</h3><canvas id="chEvents" height="120"></canvas>
+  </div></div></div>
+  <div class="col-12 col-xl-6"><div class="card h-100"><div class="card-body">
+    <h3 class="h6">Avaliações dos usuários {{ help('Respostas avaliadas como úteis (👍), não úteis (👎) e perguntas sem resposta, por dia.') }}</h3><canvas id="chQuality" height="120"></canvas>
+  </div></div></div>
+  <div class="col-12 col-xl-6"><div class="card h-100"><div class="card-body">
+    <h3 class="h6">Tokens e custo por modelo {{ help('Consumo e custo estimado de cada modelo de IA no período. Detalhes em Uso e tokens.') }}</h3>
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Modelo</th><th class="text-end">Tokens</th><th class="text-end">Custo (US$)</th></tr></thead>
+      <tbody>
+      {% for m in metrics.by_model %}<tr><td>{{ m.name }}</td><td class="text-end">{{ m.total }}</td><td class="text-end">{{ '%.4f'|format(m.cost) if m.cost is not none else '—' }}</td></tr>
+      {% else %}<tr><td colspan="3" class="text-center text-body-secondary py-3">Sem chamadas no período.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div></div></div>
+</div>
+{% else %}
+<div class="alert alert-warning">Não foi possível calcular as métricas agora (banco indisponível).</div>
+{% endif %}
+
+<div class="card mb-4"><div class="card-body">
+  <h2 class="h6 mb-3">Exportar dados {{ help('Baixe os dados em planilha (CSV) ou JSON. O número dos usuários sai mascarado e cada download fica registrado no log.') }}</h2>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-sm btn-outline-secondary" href="/admin/logs/export.csv"><i class="bi bi-filetype-csv me-1"></i>Logs</a>
+    <a class="btn btn-sm btn-outline-secondary" href="/admin/usage/export.csv?days={{ days if days in (7, 30, 90) else 30 }}"><i class="bi bi-filetype-csv me-1"></i>Uso ({{ days }} dias)</a>
+    <a class="btn btn-sm btn-outline-secondary" href="/admin/export/quality.csv"><i class="bi bi-filetype-csv me-1"></i>Casos de qualidade</a>
+    <a class="btn btn-sm btn-outline-secondary" href="/admin/export/audit.csv"><i class="bi bi-filetype-csv me-1"></i>Auditoria</a>
+    <a class="btn btn-sm btn-outline-secondary" href="/admin/api/knowledge/export.json"><i class="bi bi-filetype-json me-1"></i>Base de conhecimento</a>
+  </div>
+</div></div>
+
+{% if metrics %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+  (function () {
+    const m = {{ metrics|tojson }};
+    const css = getComputedStyle(document.documentElement);
+    Chart.defaults.color = css.getPropertyValue('--bs-secondary-color').trim() || '#64748b';
+    Chart.defaults.borderColor = css.getPropertyValue('--bs-border-color').trim() || '#e2e8f0';
+    const labels = m.daily.map(r => r.date.slice(8) + '/' + r.date.slice(5, 7));
+    const opts = { responsive: true, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true } } };
+    const sec = v => v === null ? null : v / 1000;
+    new Chart('chLatency', { type: 'line', data: { labels, datasets: [
+      { label: 'p50', data: m.daily.map(r => sec(r.p50)), borderColor: '#1d4ed8', spanGaps: true, tension: .2 },
+      { label: 'p95', data: m.daily.map(r => sec(r.p95)), borderColor: '#ea580c', spanGaps: true, tension: .2 } ] }, options: opts });
+    new Chart('chEvents', { type: 'bar', data: { labels, datasets: [
+      { label: 'Respondidas', data: m.daily.map(r => r.answered), backgroundColor: '#16a34a' },
+      { label: 'Falhas', data: m.daily.map(r => r.failed), backgroundColor: '#dc2626' },
+      { label: 'Guardrail', data: m.daily.map(r => r.guardrail), backgroundColor: '#ca8a04' } ] }, options: opts });
+    new Chart('chQuality', { type: 'bar', data: { labels, datasets: [
+      { label: '👍 Útil', data: m.daily.map(r => r.up), backgroundColor: '#16a34a' },
+      { label: '👎 Não útil', data: m.daily.map(r => r.down), backgroundColor: '#dc2626' },
+      { label: 'Sem resposta', data: m.daily.map(r => r.no_answer), backgroundColor: '#64748b' } ] },
+      options: { ...opts, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } } });
+  })();
+</script>
+{% endif %}
 {% endblock %}

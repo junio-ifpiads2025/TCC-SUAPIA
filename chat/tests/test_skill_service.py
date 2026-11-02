@@ -3,7 +3,7 @@ import functools
 
 import pytest
 
-from services import skill_service as ss
+from services.shared import skill_service as ss
 
 
 def arun(fn):

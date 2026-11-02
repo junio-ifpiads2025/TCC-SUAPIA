@@ -119,6 +119,30 @@ async def iniciar_digitacao_waha_async(chat_id: str) -> None:
         logger.error("WAHA", f"Erro ao iniciar digitação: {e}")
 
 
+async def session_status_async() -> str | None:
+    """Status da sessão padrão no WAHA (ex.: 'WORKING'); None se inacessível."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0, headers=_headers()) as client:
+            resp = await client.get(f"{WAHA_BASE_URL}/api/sessions/{_DEFAULT_SESSION}")
+        if resp.status_code != 200:
+            return f"HTTP {resp.status_code}"
+        return resp.json().get("status") or "desconhecido"
+    except Exception as e:
+        logger.error("WAHA", f"Erro ao consultar sessão: {type(e).__name__}")
+        return None
+
+
+async def restart_session_async() -> bool:
+    """Reinicia a sessão padrão do WAHA. True se o WAHA aceitou."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0, headers=_headers()) as client:
+            resp = await client.post(f"{WAHA_BASE_URL}/api/sessions/{_DEFAULT_SESSION}/restart")
+        return resp.status_code in (200, 201)
+    except Exception as e:
+        logger.error("WAHA", f"Erro ao reiniciar sessão: {type(e).__name__}")
+        return False
+
+
 async def enviar_mensagem_waha_async(chat_id: str, texto: str):
     try:
         async with httpx.AsyncClient(timeout=10.0, headers=_headers()) as client:

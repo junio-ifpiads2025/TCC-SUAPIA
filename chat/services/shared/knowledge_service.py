@@ -15,14 +15,16 @@ sobraram, sem varrer o índice vetorial.
 """
 
 import asyncio
+import json
 import uuid
+from datetime import datetime, timezone
 from functools import lru_cache
 
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from config import (
     KNOWLEDGE_CHUNK_OVERLAP,
@@ -35,7 +37,7 @@ from config import (
     PGVECTOR_CONNECTION_STRING,
 )
 from models.database import AsyncSessionLocal, KnowledgeDocument
-from services.shared import logger
+from services.shared import audit_service, logger, session_service
 
 # Namespace fixo: mesmo (documento, índice) gera sempre o mesmo id de chunk
 _NAMESPACE_IDS = uuid.UUID("b3d1a7c2-6e0f-4c55-9a1e-2f7d8c4b9e01")
@@ -152,6 +154,7 @@ async def create_document(title: str, content: str) -> dict:
         await asyncio.to_thread(_desindexar, doc_id, total)
         raise
     logger.success("CONHECIMENTO", f"Documento criado: '{title}' ({total} chunk(s)).")
+    await audit_service.record("create", "knowledge", doc_id, None, {"title": title, "content": content})
     return _resumo(doc)
 
 
@@ -165,12 +168,15 @@ async def update_document(doc_id: str, title: str | None = None, content: str | 
             doc.title if title is None else title,
             doc.content if content is None else content,
         )
+        before = {"title": doc.title, "content": doc.content}
         doc.chunk_count = await asyncio.to_thread(
             _indexar, doc_id, novo_titulo, novo_conteudo, doc.chunk_count
         )
         doc.title, doc.content = novo_titulo, novo_conteudo
         await session.commit()
     logger.success("CONHECIMENTO", f"Documento atualizado: '{novo_titulo}' ({doc.chunk_count} chunk(s)).")
+    await audit_service.record("update", "knowledge", doc_id, before,
+                               {"title": novo_titulo, "content": novo_conteudo})
     return _resumo(doc)
 
 
@@ -184,6 +190,7 @@ async def delete_document(doc_id: str) -> None:
         await session.delete(doc)
         await session.commit()
     logger.success("CONHECIMENTO", f"Documento removido: '{doc.title}'.")
+    await audit_service.record("delete", "knowledge", doc_id, {"title": doc.title, "content": doc.content}, None)
 
 
 async def get_document(doc_id: str) -> dict:
@@ -215,3 +222,106 @@ def search(query: str, k: int = KNOWLEDGE_TOP_K) -> tuple[str, list[dict]]:
         return "", []
     logger.info("CONHECIMENTO", f"{len(docs)} chunk(s) recuperado(s).")
     return "\n\n".join(d.page_content for d in docs), [d.metadata for d in docs]
+
+
+# ---------------------------------------------------------------------------
+# Reindexação completa e inspeção dos chunks (painel admin)
+# ---------------------------------------------------------------------------
+
+REINDEX_KEY = "suap:knowledge:reindex"
+REINDEX_TTL_SECONDS = 7 * 86400
+_reindex_task: asyncio.Task | None = None
+
+# Esquema do langchain_postgres: chunks em langchain_pg_embedding, ligados à coleção
+# (langchain_pg_collection.uuid) por collection_id; metadados em cmetadata (JSONB).
+_CHUNKS_SQL = text(
+    "SELECT e.id, e.document, (e.cmetadata->>'chunk_index')::int AS idx "
+    "FROM langchain_pg_embedding e "
+    "JOIN langchain_pg_collection c ON c.uuid = e.collection_id "
+    "WHERE c.name = :collection AND e.cmetadata->>'doc_id' = :doc_id "
+    "ORDER BY idx"
+)
+
+
+async def _db_all_documents() -> list[dict]:
+    async with AsyncSessionLocal() as session:
+        docs = (await session.execute(select(KnowledgeDocument))).scalars().all()
+        return [{"id": d.id, "title": d.title, "content": d.content, "chunk_count": d.chunk_count}
+                for d in docs]
+
+
+async def _db_set_chunk_count(doc_id: str, total: int) -> None:
+    async with AsyncSessionLocal() as session:
+        doc = await session.get(KnowledgeDocument, doc_id)
+        if doc is not None:
+            doc.chunk_count = total
+            await session.commit()
+
+
+async def _db_chunks(doc_id: str) -> list[dict]:
+    async with AsyncSessionLocal() as session:
+        rows = (await session.execute(_CHUNKS_SQL, {"collection": KNOWLEDGE_COLLECTION, "doc_id": doc_id})).all()
+    return [{"id": r.id, "index": r.idx, "content": r.document} for r in rows]
+
+
+async def _progress_set(data: dict) -> None:
+    await session_service.get_redis().setex(REINDEX_KEY, REINDEX_TTL_SECONDS, json.dumps(data))
+
+
+async def _progress_get() -> dict | None:
+    raw = await session_service.get_redis().get(REINDEX_KEY)
+    return json.loads(raw) if raw else None
+
+
+async def reindex_all() -> dict:
+    """Revetoriza todos os documentos, um por vez. Falha num documento não para os demais."""
+    docs = await _db_all_documents()
+    progress = {"status": "running", "total": len(docs), "done": 0, "failed": 0,
+                "started_at": datetime.now(timezone.utc).isoformat(), "finished_at": None}
+    await _progress_set(progress)
+    for d in docs:
+        try:
+            total = await asyncio.to_thread(_indexar, d["id"], d["title"], d["content"], d["chunk_count"])
+            await _db_set_chunk_count(d["id"], total)
+            progress["done"] += 1
+        except Exception as e:
+            progress["failed"] += 1
+            logger.error("CONHECIMENTO", f"Reindexação falhou para o documento {d['id']}: {e}")
+        await _progress_set(progress)
+    progress.update(status="finished", finished_at=datetime.now(timezone.utc).isoformat())
+    await _progress_set(progress)
+    logger.success("CONHECIMENTO", f"Reindexação concluída: {progress['done']} ok, {progress['failed']} falha(s).")
+    return progress
+
+
+async def _run_reindex() -> None:
+    try:
+        await reindex_all()
+    except Exception as e:  # Redis/Postgres fora do ar: registra e marca como falha
+        logger.error("CONHECIMENTO", f"Reindexação interrompida: {e}")
+        try:
+            await _progress_set({"status": "error", "total": 0, "done": 0, "failed": 0,
+                                 "started_at": None, "finished_at": datetime.now(timezone.utc).isoformat()})
+        except Exception:
+            pass
+
+
+async def start_reindex() -> bool:
+    """Dispara a reindexação em background. False se já houver uma em andamento."""
+    global _reindex_task
+    if _reindex_task is not None and not _reindex_task.done():
+        return False
+    _reindex_task = asyncio.get_running_loop().create_task(_run_reindex())
+    await audit_service.record("reindex", "knowledge_reindex", None, None, None)
+    return True
+
+
+async def reindex_status() -> dict | None:
+    """Progresso da última reindexação (None se nunca rodou ou expirou)."""
+    return await _progress_get()
+
+
+async def list_chunks(doc_id: str) -> list[dict]:
+    """Chunks gravados no pgvector para um documento, na ordem do texto."""
+    await get_document(doc_id)  # KnowledgeNotFound se não existir
+    return await _db_chunks(doc_id)

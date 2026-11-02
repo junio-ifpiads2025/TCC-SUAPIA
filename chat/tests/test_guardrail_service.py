@@ -12,7 +12,7 @@ def arun(fn):
 
 import pytest
 
-from services import guardrail_service as gs
+from services.shared import guardrail_service as gs
 
 
 def rows(*specs):

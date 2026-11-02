@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import delete, select
 
 from models.database import AsyncSessionLocal, Guardrail
-from services.shared import logger
+from services.shared import audit_service, logger
 
 MAX_PATTERN_LEN = 500
 MAX_TEXT_LEN = 2000
@@ -79,6 +79,12 @@ async def _db_list() -> list[dict]:
     async with AsyncSessionLocal() as s:
         rows = (await s.execute(select(Guardrail).order_by(Guardrail.priority, Guardrail.id))).scalars().all()
         return [_to_dict(r) for r in rows]
+
+
+async def _db_get(rule_id: int) -> dict | None:
+    async with AsyncSessionLocal() as s:
+        g = await s.get(Guardrail, rule_id)
+        return _to_dict(g) if g else None
 
 
 async def _db_insert(data: dict) -> dict:
@@ -219,21 +225,32 @@ async def list_rules() -> list[dict]:
     return await _db_list()
 
 
+def _snapshot(r: dict | None) -> dict | None:
+    """Regra sem a data de criação, usada na auditoria e na reversão."""
+    return None if r is None else {k: v for k, v in r.items() if k != "created_at"}
+
+
 async def create_rule(data: dict) -> dict:
     row = await _db_insert(validate(data))
     await reload()
+    await audit_service.record("create", "guardrail", row["id"], None, _snapshot(row))
     return row
 
 
 async def update_rule(rule_id: int, data: dict) -> dict:
-    row = await _db_update(rule_id, validate(data))
+    values = validate(data)
+    before = await _db_get(rule_id)
+    row = await _db_update(rule_id, values)
     await reload()
+    await audit_service.record("update", "guardrail", rule_id, _snapshot(before), _snapshot(row))
     return row
 
 
 async def delete_rule(rule_id: int) -> None:
+    before = await _db_get(rule_id)
     await _db_delete(rule_id)
     await reload()
+    await audit_service.record("delete", "guardrail", rule_id, _snapshot(before), None)
 
 
 # ── Avaliação (síncrona, sem I/O) ────────────────────────────────────────────

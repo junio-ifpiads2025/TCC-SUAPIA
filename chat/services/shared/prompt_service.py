@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 
 from config import AGENT_NAME
 from models.database import AsyncSessionLocal, PromptVersion
-from services.shared import guardrail_service, logger
+from services.shared import audit_service, guardrail_service, logger
 
 MAX_PROMPT_LEN = 20000
 MAX_AGENT_NAME_LEN = 50
@@ -72,6 +72,11 @@ async def _db_list() -> list[dict]:
         return [_to_dict(v) for v in rows]
 
 
+def _snapshot(v: dict | None) -> dict | None:
+    """Campos da versão relevantes para a auditoria."""
+    return None if v is None else {"id": v["id"], "agent_name": v.get("agent_name"), "content": v["content"]}
+
+
 # ── API pública ──────────────────────────────────────────────────────────────
 
 async def load() -> None:
@@ -121,14 +126,18 @@ async def save(content: str, author: str | None = None, name: str | None = None)
     name = (name or "").strip() or None
     if name and len(name) > MAX_AGENT_NAME_LEN:
         raise PromptError(f"Nome do agente longo demais (máx. {MAX_AGENT_NAME_LEN} caracteres).")
+    before = _active
     _active = await _db_insert_active(content, author, name)
+    await audit_service.record("save", "prompt", _active["id"], _snapshot(before), _snapshot(_active))
     return _active
 
 
 async def activate(version_id: int) -> dict:
     """Restaura uma versão antiga, tornando-a a ativa."""
     global _active
+    before = _active
     _active = await _db_activate(version_id)
+    await audit_service.record("activate", "prompt", version_id, _snapshot(before), _snapshot(_active))
     return _active
 
 

@@ -1,32 +1,80 @@
 {% extends "base.html" %}
+{% from "_help.html" import help %}
 {% block title %}Acesso{% endblock %}
 {% block content %}
-<h1 class="h3 page-title mb-4">Controle de acesso</h1>
+<h1 class="h3 page-title mb-4">Controle de acesso {{ help('Define quem pode conversar com o assistente. Cadastre um número como Permitir ou Bloquear. Se um número estiver nas duas situações, o bloqueio vale.') }}</h1>
 {% if msg %}<div class="alert alert-info">{{ msg }}</div>{% endif %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <form method="post" action="/admin/access/open-mode" class="d-flex align-items-center gap-3 m-0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" name="open_mode" value="1" id="open_mode" {{ 'checked' if open_mode }}>
+        <label class="form-check-label" for="open_mode">Responder qualquer número</label>{{ help('Se marcado, qualquer pessoa pode conversar com o assistente, exceto os números bloqueados. Desmarcado, só os números em Permitidos são atendidos.') }}
+      </div>
+      <button class="btn btn-sm btn-outline-primary ms-auto" type="submit">Aplicar</button>
+    </form>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <h2 class="h6 mb-3">Limite diário de mensagens {{ help('Quantas mensagens cada pessoa pode mandar por dia. O padrão vale para todos; um limite próprio substitui o padrão só para aquele número. Deixe em branco para voltar ao valor de fábrica (padrão) ou ao padrão geral (limite próprio).') }}</h2>
+    <form method="post" action="/admin/access/limit" class="row g-2 align-items-end mb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-8 col-lg-4">
+        <label class="form-label small mb-1" for="default_limit">Padrão para todos</label>
+        <input class="form-control" type="number" min="0" id="default_limit" name="daily_limit" value="{{ default_limit }}">
+      </div>
+      <div class="col-4 col-lg-2 d-grid"><button class="btn btn-outline-primary" type="submit">Salvar</button></div>
+    </form>
+    <form method="post" action="/admin/access/user-limit" class="row g-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="col-12 col-lg-4">
+        <label class="form-label small mb-1" for="limit_chat_id">Número</label>
+        <input class="form-control" id="limit_chat_id" name="chat_id" placeholder="whatsapp:5586999999999@c.us" required>
+      </div>
+      <div class="col-8 col-lg-2">
+        <label class="form-label small mb-1" for="user_limit">Limite próprio</label>
+        <input class="form-control" type="number" min="0" id="user_limit" name="daily_limit" placeholder="padrão">
+      </div>
+      <div class="col-4 col-lg-2 d-grid"><button class="btn btn-outline-primary" type="submit">Salvar</button></div>
+    </form>
+    {% if limits %}
+    <div class="table-responsive mt-3">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Número</th><th>Limite próprio</th></tr></thead>
+        <tbody>{% for r in limits %}<tr><td>{{ r.chat_id }}</td><td>{{ r.daily_limit }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
 
 <div class="card mb-3">
   <div class="card-body">
     <form method="post" action="/admin/access" class="row g-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="col-12 col-lg-4">
-        <label class="form-label small mb-1">Número</label>
+        <label class="form-label small mb-1">Número {{ help('Identificação do usuário no formato mostrado no placeholder (ex.: whatsapp:5586999999999@c.us).') }}</label>
         <input class="form-control" name="chat_id" placeholder="whatsapp:5586999999999@c.us" required>
       </div>
       <div class="col-6 col-lg-2">
-        <label class="form-label small mb-1">Tipo</label>
+        <label class="form-label small mb-1">Tipo {{ help('Permitir: o número pode usar o assistente. Bloquear: o número é impedido de usar.') }}</label>
         <select class="form-select" name="kind">
           <option value="allow">Permitir</option>
           <option value="block">Bloquear</option>
         </select>
       </div>
       <div class="col-6 col-lg-3">
-        <label class="form-label small mb-1">Motivo</label>
+        <label class="form-label small mb-1">Motivo {{ help('Anotação opcional para lembrar por que o número foi liberado ou bloqueado. O usuário não vê.') }}</label>
         <input class="form-control" name="reason" placeholder="Opcional">
       </div>
       <div class="col-12 col-lg-3 d-flex gap-3 align-items-center">
         <div class="form-check mb-0">
           <input class="form-check-input" type="checkbox" name="clear_session" value="1" id="clear_session">
-          <label class="form-check-label small" for="clear_session">encerrar sessão ao bloquear</label>
+          <label class="form-check-label small" for="clear_session">encerrar sessão ao bloquear</label>{{ help('Se marcado, a pessoa é desconectada na hora e precisará fazer login de novo (que será negado). Sem marcar, o bloqueio vale só a partir da próxima tentativa.') }}
         </div>
         <button class="btn btn-primary ms-auto" type="submit"><i class="bi bi-save me-1"></i>Salvar</button>
       </div>

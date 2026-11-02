@@ -69,11 +69,16 @@ class TelegramProvider(MessagingProvider):
                 "(em dev use um túnel, ex: ngrok/cloudflared)",
             )
             return
+        await self._set_webhook()
+
+    async def _set_webhook(self) -> bool:
         params = {"url": f"{APP_BASE_URL.rstrip('/')}/webhook/telegram", "allowed_updates": ["message"]}
         if TELEGRAM_WEBHOOK_SECRET:
             params["secret_token"] = TELEGRAM_WEBHOOK_SECRET
         if await self._call("setWebhook", **params):
             logger.success("TELEGRAM", "Webhook registrado")
+            return True
+        return False
 
     async def parse_webhook(self, request: Request) -> IncomingMessage | None:
         if TELEGRAM_WEBHOOK_SECRET:
@@ -112,3 +117,21 @@ class TelegramProvider(MessagingProvider):
 
     async def iniciar_digitacao(self, chat_id: str) -> None:
         await self._call("sendChatAction", chat_id=chat_id, action="typing")
+
+    async def health(self) -> tuple[bool, str]:
+        if not TELEGRAM_BOT_TOKEN:
+            return False, "TELEGRAM_BOT_TOKEN ausente"
+        data = await self._call("getWebhookInfo")
+        if data is None:
+            return False, "Bot API inacessível"
+        info = data.get("result") or {}
+        if not info.get("url"):
+            return False, "webhook não registrado"
+        if info.get("last_error_message"):
+            return False, f"último erro do webhook: {info['last_error_message'][:120]}"
+        return True, f"webhook ativo, {info.get('pending_update_count', 0)} pendente(s)"
+
+    async def reconnect(self) -> bool:
+        if not TELEGRAM_BOT_TOKEN or not APP_BASE_URL.startswith("https://"):
+            return False
+        return await self._set_webhook()

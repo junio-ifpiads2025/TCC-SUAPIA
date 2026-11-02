@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_help.html" import help %}
+{% block title %}Mensagem em massa{% endblock %}
+{% block content %}
+<h1 class="h3 page-title mb-4">Mensagem em massa {{ help('Envia um aviso para todos os usuários que aceitaram os Termos de Uso e que o assistente atende hoje (bloqueados ficam de fora). Primeiro você escreve, depois confere quantas pessoas vão receber e só então confirma. O envio é feito aos poucos, com intervalo entre mensagens.') }}</h1>
+{% if msg %}<div class="alert {{ 'alert-danger' if msg.startswith('Erro') else 'alert-success' }} py-2">{{ msg }}</div>{% endif %}
+
+{% if selected %}
+<div class="card mb-4"><div class="card-body">
+  <div class="d-flex align-items-center mb-2">
+    <h2 class="h6 mb-0 me-auto">Envio #{{ selected.id }} <span class="small text-body-secondary">por {{ selected.admin }}</span></h2>
+    <a class="btn btn-sm btn-outline-secondary" href="/admin/broadcast"><i class="bi bi-plus-lg me-1"></i>Nova mensagem</a>
+  </div>
+  <div class="border rounded p-3 mb-3 small" style="white-space: pre-wrap">{{ selected.text }}</div>
+
+  {% if selected.status == 'draft' %}
+    <p class="mb-2"><strong>{{ preview.total }}</strong> destinatário(s) {{ help('Por privacidade, só os 4 últimos dígitos de cada número aparecem.') }}</p>
+    {% if preview.sample %}
+    <p class="small text-body-secondary mb-3">{{ preview.sample | join(', ') }}{% if preview.total > preview.sample | length %} e mais {{ preview.total - preview.sample | length }}{% endif %}</p>
+    {% endif %}
+    <div class="d-flex gap-2">
+      <form method="post" action="/admin/broadcast/{{ selected.id }}/send" class="m-0" onsubmit="return confirm('Enviar para {{ preview.total }} destinatário(s)? Não dá para desfazer as mensagens já entregues.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-primary" type="submit" {{ 'disabled' if not preview.total }}><i class="bi bi-send me-1"></i>Confirmar envio</button>
+      </form>
+      <form method="post" action="/admin/broadcast/{{ selected.id }}/cancel" class="m-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-outline-secondary" type="submit">Descartar rascunho</button>
+      </form>
+    </div>
+  {% else %}
+    {% set b = selected %}{% include "_broadcast_progress.html" %}
+    {% if selected.status == 'sending' %}
+    <form method="post" action="/admin/broadcast/{{ selected.id }}/cancel" class="mt-3 m-0" onsubmit="return confirm('Interromper o envio?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-stop-circle me-1"></i>Cancelar envio</button>
+    </form>
+    {% endif %}
+  {% endif %}
+</div></div>
+{% else %}
+<div class="card mb-4"><div class="card-body">
+  <h2 class="h6 mb-3">Redigir {{ help('Escreva o aviso como ele deve chegar no WhatsApp/Telegram. Nada é enviado agora: o próximo passo mostra os destinatários para você confirmar.') }}</h2>
+  <form method="post" action="/admin/broadcast">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <textarea class="form-control mb-3" name="text" rows="6" maxlength="{{ max_len }}" required placeholder="Mensagem (máx. {{ max_len }} caracteres)"></textarea>
+    <button class="btn btn-primary" type="submit"><i class="bi bi-eye me-1"></i>Pré-visualizar destinatários</button>
+  </form>
+</div></div>
+{% endif %}
+
+<div class="card"><div class="table-responsive">
+  <table class="table table-hover mb-0">
+    <thead><tr><th>#</th><th>Quando</th><th>Admin</th><th>Mensagem</th><th>Situação</th><th>Enviadas</th><th>Falhas</th></tr></thead>
+    <tbody>
+    {% for h in history %}
+      <tr>
+        <td><a href="/admin/broadcast?id={{ h.id }}">{{ h.id }}</a></td>
+        <td class="text-nowrap small">{{ h.created_at.strftime('%d/%m/%Y %H:%M') if h.created_at else '' }}</td>
+        <td>{{ h.admin }}</td>
+        <td class="small">{{ h.text | truncate(80) }}</td>
+        <td><span class="badge text-bg-secondary">{{ h.status }}</span></td>
+        <td>{{ h.sent }}/{{ h.total }}</td>
+        <td>{{ h.failed }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="text-center text-body-secondary py-4">Nenhum envio ainda.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div></div>
+{% endblock %}

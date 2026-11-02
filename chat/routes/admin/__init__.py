@@ -7,8 +7,9 @@ routes/admin/common.py (require_admin, verify_csrf, render).
 
 from fastapi import APIRouter
 
-from routes.admin import access, admins, auth, knowledge, logs, prompt, queue, skills, usage
+from routes.admin import access, admins, audit, auth, broadcast, exports, health, knowledge, logs, prompt, quality, queue, skills, usage, users
 
 router = APIRouter()
-for _m in (auth, queue, prompt, skills, knowledge, access, logs, usage, admins):
+# exports antes de knowledge: /api/knowledge/export.json não pode cair em /api/knowledge/{doc_id}
+for _m in (auth, queue, prompt, skills, exports, knowledge, access, logs, audit, quality, usage, admins, broadcast, health, users):
     router.include_router(_m.router)

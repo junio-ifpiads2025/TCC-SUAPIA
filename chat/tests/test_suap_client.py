@@ -3,8 +3,8 @@ import json
 import httpx
 import pytest
 
-from services import mcp_client
-from services.mcp_client import SUAPMCPClient
+from services.chat import mcp_client
+from services.chat.mcp_client import SUAPMCPClient
 
 BASE = "https://suap.test"
 

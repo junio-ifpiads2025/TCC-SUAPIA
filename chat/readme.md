@@ -34,7 +34,7 @@ WhatsApp / Telegram
    WAHA (Docker) / Telegram ──► POST /webhook[/{provider}]
       │
       ▼
-   routes/webhook.py
+   routes/chat/webhook.py
       │  provider.parse_webhook → IncomingMessage
       │  acl_service.check (block vence; sem I/O)  ──► bloqueado/negado: descarta + access_log
       ▼
@@ -61,9 +61,9 @@ WhatsApp / Telegram
 
 ## Contrato de Mensageria
 
-Todo envio passa por **`services/messaging_client.py`** (fachada), que escolhe o provider pelo `chat_id`. Rotas e serviços nunca importam código de plataforma.
+Todo envio passa por **`services/chat/messaging_client.py`** (fachada), que escolhe o provider pelo `chat_id`. Rotas e serviços nunca importam código de plataforma.
 
-O contrato é a classe abstrata **`MessagingProvider`** (`services/providers/base.py`):
+O contrato é a classe abstrata **`MessagingProvider`** (`services/chat/providers/base.py`):
 
 | Método | Obrigatório | Função |
 |--------|:-----------:|--------|
@@ -76,8 +76,8 @@ O contrato é a classe abstrata **`MessagingProvider`** (`services/providers/bas
 Os métodos recebem o `chat_id` **nativo** da plataforma. O provider `waha` mantém o id puro (`5586...@c.us`); os demais são prefixados na aplicação (`telegram:123456`), evitando colisão entre plataformas.
 
 **Para adicionar um provider (ex: Discord):**
-1. Crie `services/providers/discord.py` com uma subclasse de `MessagingProvider` (`name = "discord"`).
-2. Registre `"discord": "services.providers.discord:DiscordProvider"` em `_BUILTIN` (`services/providers/__init__.py`).
+1. Crie `services/chat/providers/discord.py` com uma subclasse de `MessagingProvider` (`name = "discord"`).
+2. Registre `"discord": "services.providers.discord:DiscordProvider"` em `_BUILTIN` (`services/chat/providers/__init__.py`).
 3. Habilite no `.env`: `MESSAGING_PROVIDERS=waha,discord`.
 4. Aponte o webhook da plataforma para `POST /webhook/discord` (validação de secret/assinatura vai dentro de `parse_webhook`).
 5. Cadastre os chat_ids permitidos em `/admin/access`.
@@ -100,9 +100,11 @@ Só conversas privadas com texto são processadas. Respostas longas são dividid
 
 ## Estrutura de Arquivos
 
+Organização por domínio (ver AGENT.MD): `chat` (atendimento pelo WhatsApp/Telegram), `admin` (painel) e `shared` (usado pelos dois). `chat` nunca importa `admin`; `admin` pode importar `chat` e `shared`.
+
 ```
 chat/
-├── main.py                         # FastAPI: routers, lifespan, workers da fila, retenção de logs
+├── main.py                         # FastAPI: routers, lifespan, workers da fila, retenção, alertas
 ├── config.py                       # Todas as variáveis de ambiente centralizadas
 ├── requirements.txt
 ├── Dockerfile                      # python:3.12-slim, uvicorn na porta 8002
@@ -111,51 +113,77 @@ chat/
 ├── .env.example                    # Modelo de variáveis (copie para .env.dev / .env.prod)
 ├── docs/
 │   ├── Plano_Painel_Admin.md       # Plano e decisões do painel admin
+│   ├── Plano_Painel_Admin_Expansao.md  # Plano da expansão do painel (auditoria, qualidade, saúde...)
 │   ├── Plano_Integracao_SUAP_MCP.md
 │   └── Resumo_Alteracoes_SUAP_MCP.md
+├── models/
+│   └── database.py                 # SQLAlchemy async: tabelas, init_db e migrações IF NOT EXISTS
+├── routes/
+│   ├── chat/
+│   │   ├── webhook.py              # POST /webhook[/{provider}] — eventos das plataformas
+│   │   ├── auth.py                 # GET/POST /auth/login — login web do aluno
+│   │   └── terms.py                # GET /terms (JSON), /terms/view (HTML) — Termo de Uso
+│   └── admin/                      # Painel /admin (cada módulo exporta `router`)
+│       ├── __init__.py             # Agregador dos routers do painel
+│       ├── common.py               # Templates, sessão assinada, CSRF, require_admin, render
+│       ├── auth.py                 # Login/logout do painel + dashboard (/admin)
+│       ├── queue.py                # Fila de atendimento
+│       ├── prompt.py               # System prompt
+│       ├── skills.py               # Skills + guardrails
+│       ├── knowledge.py            # Base de conhecimento, reindexação, chunks
+│       ├── access.py               # Allowlist / blocklist e limites diários
+│       ├── users.py                # Busca, detalhe, bloqueio e exclusão de dados (LGPD)
+│       ├── usage.py                # Uso de tokens e custo
+│       ├── quality.py              # Avaliações e perguntas sem resposta
+│       ├── logs.py                 # Log de acesso (+ PDF)
+│       ├── audit.py                # Auditoria das alterações e reversão
+│       ├── exports.py              # Exportações CSV/JSON
+│       ├── health.py               # Saúde do sistema e /health público
+│       ├── broadcast.py            # Mensagem em massa
+│       └── admins.py               # Administradores por matrícula
+├── services/
+│   ├── chat/                       # Atendimento
+│   │   ├── messaging_client.py     # ★ Fachada de envio (único ponto de import)
+│   │   ├── providers/              # ★ Contrato (base.py, com health/reconnect), waha.py, telegram.py
+│   │   ├── waha_client.py          # Cliente HTTP do WAHA (anti-ban: sendSeen → typing → delay → sendText)
+│   │   ├── queue_service.py        # Fila Redis, worker, recuperação, retry, limites e cota de tokens
+│   │   ├── message_router.py       # Comandos, guardrails de entrada/saída, histórico, "sem resposta"
+│   │   ├── feedback_service.py     # Pedido de avaliação ("1"/"2") pendente no Redis
+│   │   ├── thread_service.py       # Histórico curto da conversa (Redis)
+│   │   ├── agent_orchestrator.py   # Orquestrador ReAct (tool_calling loop)
+│   │   ├── rag_agent.py            # RAG dos manuais (tool search_manuals)
+│   │   ├── mcp_client.py           # Cliente httpx da API SUAP com tools OpenAI
+│   │   └── falta_calculator.py     # Limite e cálculo de faltas por disciplina
+│   ├── shared/                     # Usado pelo atendimento e pelo painel
+│   │   ├── auth_service.py         # Autenticação SUAP, vínculo chat_id → matrícula, perfil
+│   │   ├── session_service.py      # Redis: token TTL, rate limit, contador de tokens, link UUID, perfil
+│   │   ├── acl_service.py          # Allowlist/blocklist e limites diários com cache em memória
+│   │   ├── access_log_service.py   # Log de acesso (Postgres), LGPD-safe, rotina de retenção
+│   │   ├── audit_service.py        # Auditoria das alterações dos admins (ContextVar current_admin)
+│   │   ├── prompt_service.py       # System prompt versionado
+│   │   ├── guardrail_service.py    # Regras input/output/prompt
+│   │   ├── skill_service.py        # Skills editáveis
+│   │   ├── knowledge_service.py    # CRUD, busca vetorial e reindexação da base de conhecimento
+│   │   ├── qa_case_service.py      # Casos de qualidade (avaliações e "sem resposta")
+│   │   ├── usage_service.py        # Consumo de tokens por chamada, custo estimado
+│   │   ├── dashboard_service.py    # Indicadores do dashboard (latência, erros, satisfação)
+│   │   └── logger.py               # Logger estruturado
+│   └── admin/                      # Só o painel
+│       ├── admin_user_service.py   # Administradores por matrícula
+│       ├── audit_revert.py         # Reversão de entradas da auditoria
+│       ├── user_admin_service.py   # Busca e detalhe de usuários
+│       ├── user_data_service.py    # Exclusão de dados do titular (LGPD)
+│       ├── export_service.py       # CSV/JSON com neutralização de fórmulas
+│       ├── health_service.py       # Sondas de saúde e reconexão de providers
+│       ├── alert_service.py        # Alertas (Telegram/SMTP) e alert_loop
+│       ├── broadcast_service.py    # Envio de mensagem em massa
+│       └── pdf_report.py           # PDF do log de acesso
 ├── web/
 │   ├── login.html                  # Login do aluno (HTML puro, placeholders {{TOKEN}}/{{AGENT_NAME}})
-│   └── admin/                      # Templates Jinja2 do painel (base, dashboard, queue, prompt,
-│                                   #   skills, knowledge, access, logs, login, parciais HTMX)
-├── models/
-│   └── database.py                 # SQLAlchemy async: UserAuth, KnowledgeDocument, AccessRule,
-│                                   #   AccessLog, PromptVersion, Skill, Guardrail
-├── routes/
-│   ├── webhook.py                  # POST /webhook[/{provider}] — eventos das plataformas
-│   ├── auth.py                     # GET/POST /auth/login — login web do aluno
-│   ├── terms.py                    # GET /terms (JSON), /terms/view (HTML) — Termo de Compromisso de Uso
-│   ├── admin.py                    # Agregador dos routers do painel
-│   ├── admin_common.py             # Templates, sessão assinada, CSRF, require_admin, render
-│   ├── admin_auth.py               # Login/logout do painel + resumo (/admin)
-│   ├── admin_queue.py              # Fila de atendimento
-│   ├── admin_prompt.py             # System prompt
-│   ├── admin_skills.py             # Skills + guardrails
-│   ├── admin_knowledge.py          # Base de conhecimento
-│   ├── admin_access.py             # Allowlist / blocklist
-│   └── admin_logs.py               # Log de acesso
-├── services/
-│   ├── messaging_client.py         # ★ Fachada de envio (único ponto de import)
-│   ├── providers/                  # ★ Contrato (base.py), registry, waha.py, telegram.py
-│   ├── waha_client.py              # Cliente HTTP do WAHA (anti-ban: sendSeen → typing → delay → sendText)
-│   ├── auth_service.py             # Autenticação SUAP, vínculo chat_id → matrícula, perfil
-│   ├── session_service.py          # Redis: token TTL, rate limit, link UUID, perfil
-│   ├── queue_service.py            # Fila Redis (listas), worker, recuperação, retry
-│   ├── message_router.py           # Comandos, guardrails de entrada/saída, histórico
-│   ├── thread_service.py           # Histórico curto da conversa (Redis)
-│   ├── acl_service.py              # Allowlist/blocklist com cache em memória
-│   ├── access_log_service.py       # Log de acesso (Postgres), LGPD-safe
-│   ├── prompt_service.py           # System prompt versionado
-│   ├── guardrail_service.py        # Regras input/output/prompt
-│   ├── skill_service.py            # Skills editáveis
-│   ├── knowledge_service.py        # CRUD + busca vetorial da base de conhecimento
-│   ├── rag_agent.py                # RAG dos manuais (busca vetorial; usado pela tool search_manuals)
-│   ├── agent_orchestrator.py       # Orquestrador ReAct (tool_calling loop)
-│   ├── mcp_client.py               # Cliente httpx da API SUAP com tools OpenAI
-│   ├── falta_calculator.py         # Limite e cálculo de faltas por disciplina
-│   └── logger.py                   # Logger estruturado
+│   └── admin/                      # Templates Jinja2 do painel (uma página por área + parciais `_*.html`)
 ├── utils/
-│   └── security.py                 # Sanitização de logs (remove token, senha, CPF)
-└── tests/                          # pytest (fakes manuais, sem Redis/Postgres reais)
+│   └── security.py                 # Sanitização de logs e mascaramento de chat_id (•••1234)
+└── tests/                          # pytest (fakes manuais, sem Redis/Postgres reais; conftest isola a auditoria)
 ```
 
 ---
@@ -190,6 +218,7 @@ O webhook retorna `200 OK` imediatamente (RNF01); o atendimento ocorre em worker
 | `suap:queue:started` | hash | `id → timestamp` do início do atendimento |
 | `suap:queue:failed` | list | Falhas/timeouts (máx. 500) |
 | `suap:queue:done` | list | Atendidas, com resposta (máx. 500, resposta truncada em 4000 chars) |
+| `suap:fb:pending:<chat_id>` | string | Pedido de feedback da última resposta (pergunta, resposta, trechos), TTL 30 min |
 
 Payload JSON: `{id, chat_id, provider, content, enqueued_at, attempts}`.
 
@@ -198,13 +227,16 @@ Garantias:
 - **Timeout (RN07):** o `_stale_cleaner` (a cada 60 s) devolve itens parados além de `QUEUE_TIMEOUT_MINUTES` para `pending`, até `QUEUE_MAX_ATTEMPTS`; depois vão para `failed`.
 - **Ordem por conversa (RN08):** o mesmo `chat_id` é atendido um por vez, mesmo com vários consumidores (`QUEUE_CONSUMERS`).
 - **Anti-ban:** mensagem marcada como lida ao chegar e "digitando…" durante o processamento.
-- **Rate limit (RN06):** `MAX_DAILY_MESSAGES` por conta/dia, contador no Redis, reset à meia-noite BRT.
+- **Rate limit (RN06):** limite diário de mensagens por conta, contador no Redis, reset à meia-noite BRT. O limite efetivo é o próprio do usuário, se houver, senão o padrão definido no painel, senão `MAX_DAILY_MESSAGES` (RN22). A mensagem de recusa informa o número efetivo.
+- **Orçamento de tokens (RN23):** com `DAILY_TOKEN_BUDGET > 0`, quem já consumiu esse total de tokens no dia tem a mensagem recusada com aviso. O consumo é somado no Redis (`suap:tokens:<chat_id>:<data>`) a cada chamada ao LLM.
+- **Alerta de limite:** cada recusa por limite ou orçamento incrementa um contador sem identificação (`suap:alert:limit:<tipo>`), que o loop de alertas lê e zera.
+- **Feedback (RN18):** a resposta "1" ou "2" a um pedido de feedback é tratada em `enqueue`, antes do rate limit: não aciona o agente nem conta no limite diário. Ver [Qualidade das Respostas](#qualidade-das-respostas).
 
 ---
 
 ## Controle de Acesso (ACL)
 
-`services/acl_service.py` — tabela `access_rule` (`chat_id`, `kind` allow|block, motivo, autor).
+`services/shared/acl_service.py` — tabela `access_rule` (`chat_id`, `kind` allow|block, motivo, autor).
 
 - **`block` sempre vence `allow`.**
 - `RESPONDER_QUALQUER_NUMERO=false`: só quem está em `allow` passa. `true`: só `block` barra.
@@ -212,15 +244,38 @@ Garantias:
 - As regras vêm **só do banco** (nada de números no `.env`); cadastre em `/admin/access`.
 - Bloqueados são descartados em silêncio e registrados no log.
 - Gerenciado em `/admin/access` (adicionar/remover, motivo, busca por número).
+- **Limite diário (RN22):** a mesma tela define o limite padrão de mensagens por dia (tabela `app_setting`, chave `max_daily_messages`; vazio volta ao `MAX_DAILY_MESSAGES` do ambiente) e o limite próprio de um número (`access_rule.daily_limit`). Um número sem regra de acesso que recebe limite próprio ganha uma linha `kind='limit'`, que não libera nem bloqueia. Remover allow/block mantém o limite próprio. Os limites ficam em cache em memória, como as regras, e toda alteração é auditada e reversível.
+
+---
+
+## Usuários e Exclusão de Dados (LGPD)
+
+`services/admin/user_admin_service.py`, `services/admin/user_data_service.py`. Página `/admin/users`.
+
+- **Busca** por matrícula ou número entre quem já fez login (`user_auth`). O número aparece mascarado (só os 4 últimos dígitos); o usuário é identificado no painel pelo id interno, nunca pelo número na URL.
+- **Detalhe:** data do aceite dos termos, primeiro login, situação de acesso, mensagens e tokens consumidos hoje (com limite e orçamento), últimos 20 eventos do log. Abrir o detalhe é registrado na auditoria como leitura (`user_data`/`view`).
+- **Ações:** bloquear (encerra a sessão na hora) e desbloquear, reaproveitando o controle de acesso; definir limite próprio.
+- **Apagar dados (RN24):** a pedido do titular, o admin digita `APAGAR` para confirmar. É removido: login (`user_auth`), log de acesso, regra de acesso/limite, casos de qualidade; no Redis, token, perfil, histórico, pendência de feedback, contadores do dia e links de login; e os itens do usuário na fila. No consumo de tokens (`llm_usage`) o número é anonimizado (os totais permanecem). O Redis é limpo antes do banco: se estiver fora do ar, a exclusão falha antes de apagar qualquer coisa e pode ser repetida. A ação é auditada sem o número (só id interno e contagens) e não pode ser revertida.
+- **Consumo por usuário:** o `chat_id` gravado em `llm_usage` vem de um `ContextVar` (`usage_service.current_chat_id`) definido pela fila durante o atendimento; `asyncio.to_thread` copia o contexto para a thread do agente. Esse vínculo é anonimizado após `ACCESS_LOG_RETENTION_DAYS` pela rotina diária de retenção.
+
+**RN22 — Limite diário configurável:** o limite de mensagens por dia é definido no painel, com padrão geral e exceção por número; vale o limite próprio quando existe.
+
+**RN23 — Orçamento diário de tokens:** com orçamento configurado, o usuário que o esgotar no dia não é atendido até a meia-noite (BRT) e recebe aviso claro.
+
+**RN24 — Exclusão a pedido do titular:** o administrador pode apagar todos os dados de um usuário, com confirmação explícita e registro na auditoria, sem que a auditoria guarde o identificador apagado.
+
+**Histórias de usuário:**
+- Como administrador, quero encontrar um aluno pela matrícula e ver o uso dele hoje, para responder a reclamações sobre limite. *Critérios de aceite:* a busca encontra por matrícula parcial; o detalhe mostra mensagens e tokens do dia e o limite efetivo.
+- Como estudante, quero pedir a exclusão dos meus dados, para exercer meu direito previsto na LGPD. *Critérios de aceite:* após a exclusão, não resta login, histórico, log, avaliação nem item de fila com meu número; a auditoria registra a exclusão sem meu número.
 
 ---
 
 ## Log de Acesso
 
-`services/access_log_service.py` — tabela `access_log`.
+`services/shared/access_log_service.py` — tabela `access_log`.
 
 - Eventos: `received`, `blocked`, `denied`, `rate_limited`, `guardrail_input`, `guardrail_output`, `answered`, `failed`.
-- **Ações do admin** também entram aqui: `chat_id=admin:<usuário>`, `provider=admin`, evento `admin_*` (login, login_failed, logout, acl_add/remove, prompt_save/activate, skill_*, guardrail_*, knowledge_*, queue_cancel/requeue). `detail` guarda só ids/alvos (`skill=x`, `version=3`), nunca conteúdo.
+- **Ações operacionais do admin** também entram aqui: `chat_id=admin:<usuário>`, `provider=admin`, evento `admin_*` (login, login_failed, logout, queue_cancel/requeue, export). `detail` guarda só ids/alvos, nunca conteúdo. Alterações de configuração vão para a [Auditoria](#auditoria-do-painel).
 - Campos: `chat_id`, `provider`, `event`, `detail`, `duration_ms`, `created_at`.
 - **LGPD:** por padrão grava só tamanho + hash curto da mensagem (`len=… sha=…`), nunca o texto. `ACCESS_LOG_STORE_CONTENT=True` libera o conteúdo.
 - Gravação fora do caminho crítico (`asyncio.create_task`).
@@ -229,9 +284,57 @@ Garantias:
 
 ---
 
+## Auditoria do Painel
+
+`services/shared/audit_service.py` — tabela `admin_audit`. Página `/admin/audit`.
+
+Toda alteração de configuração feita por um administrador fica registrada com **quem** fez, **quando**, **o quê** e o **estado antes e depois** (RN15). Cobre: prompt (salvar/restaurar versão), skills, guardrails, regras de acesso (allow/block), o modo "responder qualquer número", documentos da base de conhecimento e a lista de administradores.
+
+- O autor é identificado automaticamente pela sessão do painel: `require_admin` guarda o usuário num `ContextVar` (`current_admin`) que os serviços leem ao gravar. Fora do painel o autor aparece como `desconhecido`.
+- A gravação acontece dentro do próprio serviço da entidade, logo depois da alteração; falha ao gravar só gera aviso e não desfaz a mudança.
+- **Reverter** (`services/admin/audit_revert.py`): reaplica o estado anterior pelo próprio serviço da entidade, com as mesmas validações. Criação é desfeita removendo o item; remoção, recriando-o (documentos e guardrails recriados ganham novo id); alteração, reaplicando o "antes". No prompt, reverter reativa a versão que estava ativa. A reversão gera uma nova entrada de auditoria e marca a original como revertida (`reverted_by`), que não pode ser revertida de novo. Um admin não pode reverter alterações no próprio acesso.
+- A tela filtra por administrador, área e período e mostra o diff campo a campo.
+- **Dados pessoais:** a auditoria guarda matrícula do admin e, em regras de acesso, o `chat_id` alvo. Não guarda conversas.
+
+**RN15 — Auditoria das alterações do painel:** toda alteração de configuração feita no painel deve ser registrada com autor, data e estado anterior e posterior, e deve poder ser revertida por um administrador.
+
+**História de usuário:** como administrador, quero ver quem alterou o prompt, as regras ou os documentos e desfazer uma alteração errada, para corrigir rapidamente o comportamento do assistente. *Critérios de aceite:* cada alteração aparece em `/admin/audit` com antes/depois; "Reverter" restaura o estado anterior e a própria reversão aparece na lista.
+
+---
+
+## Qualidade das Respostas
+
+`services/chat/feedback_service.py` (pedido de avaliação) e `services/shared/qa_case_service.py` (tabela `qa_case`). Página `/admin/quality`.
+
+**Objetivo:** descobrir onde o assistente responde mal ou não sabe responder, para o administrador corrigir a base de conhecimento.
+
+Fluxo:
+1. Cada resposta do agente termina com *"Essa resposta foi útil? Responda 1 👍 ou 2 👎"*. Comandos (`/menu`, `/about`), bloqueios de guardrail e falhas não pedem avaliação. O pedido é feito por texto, igual no WhatsApp e no Telegram.
+2. A pergunta, a resposta (sem o nome do usuário) e os metadados dos trechos usados ficam no Redis por 30 minutos, à espera da avaliação.
+3. Se a próxima mensagem for "1" ou "2", o caso é gravado e o usuário recebe um agradecimento, sem chamar o LLM e sem gastar a cota diária. Qualquer outra mensagem segue normalmente (e uma nova resposta substitui o pedido pendente).
+4. Quando o assistente **não encontra resposta**, o caso é gravado direto como "sem resposta" e não há pedido de avaliação. A detecção (`message_router.is_no_answer`) considera "sem resposta" quando nenhum trecho foi recuperado e o texto contém expressões como "não encontrei".
+
+No painel, a aba **Mal avaliadas** lista as respostas 👎 e a aba **Sem resposta** lista as perguntas não respondidas, agrupando as parecidas (palavras em comum) para indicar os assuntos que mais faltam. O topo mostra a satisfação dos últimos 30 dias (% de 👍 entre as avaliadas). Em cada caso o admin registra uma nota e o status (`new`, `reviewed`, `converted`); **Converter em documento** marca o caso e abre o formulário da base de conhecimento com o título preenchido pela pergunta. Mudanças de status/nota são auditadas e podem ser revertidas.
+
+| Tipo | O que é guardado |
+|------|------------------|
+| `up` | só o `chat_id` e a data |
+| `down` | pergunta, resposta e metadados dos trechos (título/fonte, sem o texto) |
+| `no_answer` | pergunta, resposta e metadados dos trechos |
+
+**RN18 — Avaliação das respostas:** toda resposta do agente pede avaliação "1" (útil) ou "2" (não útil); a avaliação vale só para a última resposta, por até 30 minutos, e não conta no limite diário de mensagens.
+
+**RN19 — Minimização no feedback (LGPD):** pergunta e resposta só são guardadas quando a resposta é avaliada como não útil ou quando o assistente não encontra resposta; avaliações positivas guardam apenas o tipo. Os casos são apagados após `QA_CASE_RETENTION_DAYS` (purga diária) e o painel mostra só os 4 últimos dígitos do usuário.
+
+**Histórias de usuário:**
+- Como estudante, quero dizer se a resposta me ajudou, para que o assistente melhore. *Critérios de aceite:* respondo "1" ou "2" logo após a resposta e recebo um agradecimento; a avaliação não consome minhas mensagens do dia.
+- Como administrador, quero ver as respostas mal avaliadas e as perguntas sem resposta, para saber que documentos adicionar. *Critérios de aceite:* os casos aparecem em `/admin/quality`, perguntas parecidas aparecem agrupadas e "Converter em documento" abre o cadastro com o título preenchido.
+
+---
+
 ## System Prompt Editável
 
-`services/prompt_service.py` — tabela `prompt_version` (uma versão ativa).
+`services/shared/prompt_service.py` — tabela `prompt_version` (uma versão ativa).
 
 - Prompt ativo mantido em memória; `get_system_prompt()` é síncrono e sem I/O.
 - Editar cria uma nova versão ativa; versões antigas podem ser **restauradas**.
@@ -244,7 +347,7 @@ Garantias:
 
 ## Guardrails
 
-`services/guardrail_service.py` — tabela `guardrail`, regras compiladas em memória.
+`services/shared/guardrail_service.py` — tabela `guardrail`, regras compiladas em memória.
 
 | Escopo | Onde atua | Ações |
 |--------|-----------|-------|
@@ -260,7 +363,7 @@ Segurança: regex validada ao salvar (padrão até 500 caracteres, detecção de
 
 ## Skills
 
-`services/skill_service.py` — tabela `skill` (slug, nome, descrição, corpo markdown até 20 000 chars).
+`services/shared/skill_service.py` — tabela `skill` (slug, nome, descrição, corpo markdown até 20 000 chars).
 
 - O agente recebe só o **catálogo** (slug, nome, descrição) no prompt.
 - Quando a pergunta se encaixa, chama a tool **`load_skill`** para ler as instruções completas.
@@ -270,18 +373,107 @@ Segurança: regex validada ao salvar (padrão até 500 caracteres, detecção de
 
 ## Base de Conhecimento (RAG editável)
 
-`services/knowledge_service.py` — tabela `knowledge_document` + coleção pgvector própria `conhecimento_agente` (**não toca nos manuais** já indexados).
+`services/shared/knowledge_service.py` — tabela `knowledge_document` + coleção pgvector própria `conhecimento_agente` (**não toca nos manuais** já indexados).
 
 - Documento dividido em chunks (`KNOWLEDGE_CHUNK_SIZE` / `KNOWLEDGE_CHUNK_OVERLAP`) com ids determinísticos; atualizar faz upsert e remove só as sobras; falha no banco desfaz os vetores.
 - Limite por documento: `KNOWLEDGE_MAX_CHARS`. Upload de `.txt` e `.md`.
 - Tool `search_knowledge` no agente (top-k = `KNOWLEDGE_TOP_K`), ao lado de `search_manuals`.
 - `/admin/knowledge`: criar, editar (reindexa), excluir, upload e **testar a recuperação**.
+- **Reindexar tudo:** `reindex_all()` revetoriza todos os documentos, um por vez, em background (`start_reindex`), sem tirar o assistente do ar. O progresso (total, feitos, falhas, situação) fica no Redis em `suap:knowledge:reindex` (expira em 7 dias) e a tela mostra uma barra que se atualiza sozinha. Falha num documento é registrada e não interrompe os demais; só uma reindexação roda por vez. O disparo é auditado.
+- **Ver chunks:** cada documento mostra os pedaços gravados no pgvector, consultando direto as tabelas do `langchain_postgres` (`langchain_pg_embedding` filtrada pela coleção em `langchain_pg_collection` e por `cmetadata->>'doc_id'`).
+- A coleção dos manuais é construída fora do app (`../pipeline`) e não é reindexada por aqui.
+
+**RN16 — Reindexação única:** só uma reindexação completa da base de conhecimento pode rodar por vez; um documento com falha não impede os demais.
+
+---
+
+## Mensagem em Massa (Broadcast)
+
+`services/admin/broadcast_service.py` — tabela `broadcast`. Página `/admin/broadcast`.
+
+Permite ao administrador enviar um aviso (ex.: prazo de matrícula, manutenção do SUAP) a todos os usuários do assistente.
+
+1. **Redigir:** o texto (até 4000 caracteres) vira um rascunho. Nada é enviado.
+2. **Pré-visualizar:** a tela mostra quantos destinatários existem e uma amostra com só os 4 últimos dígitos de cada número.
+3. **Confirmar:** o envio roda em background, um destinatário por vez, com intervalo de `BROADCAST_DELAY_SECONDS` (o WAHA ainda aplica o próprio atraso anti-ban, RN14). A tela acompanha enviadas, falhas e total.
+4. **Cancelar:** descarta o rascunho ou interrompe o envio antes da próxima mensagem.
+
+- **Destinatários (RN17):** usuários que aceitaram os Termos de Uso e que o assistente atenderia hoje — fora da blocklist e, com a allowlist ativa, dentro dela.
+- Criar, enviar e cancelar ficam na [auditoria](#auditoria-do-painel) (não reversíveis: mensagem entregue não volta).
+- **LGPD:** a tela nunca mostra o número completo; o registro guarda só texto, autor e contadores, sem a lista de destinatários.
+- Limitação: se o processo reiniciar no meio do envio, o registro fica como "sending"; cancelar encerra o registro sem reenviar.
+
+**RN17 — Destinatários do broadcast:** a mensagem em massa só vai para quem aceitou os Termos de Uso e não está bloqueado (respeitando a allowlist quando ativa), e só é enviada depois de o administrador confirmar o número de destinatários.
+
+**História de usuário:** como administrador, quero avisar todos os estudantes sobre um prazo, para que eles recebam a informação no canal que já usam. *Critérios de aceite:* vejo quantas pessoas receberão antes de confirmar; acompanho enviadas e falhas; posso interromper o envio.
+
+---
+
+## Indicadores e Exportações
+
+`services/shared/dashboard_service.py` (indicadores) e `services/admin/export_service.py` + `routes/admin/exports.py` (exportações). Os indicadores aparecem no Resumo do painel (`/admin`), com seletor de período (7, 30 ou 90 dias) e gráficos (Chart.js).
+
+Indicadores do período, dia a dia:
+- **Tempo de resposta** p50 e p95: metade das respostas sai em até p50; só 5% demoram mais que p95. Vem da duração registrada no log de acesso para cada mensagem respondida.
+- **Taxa de erro:** mensagens que falharam ÷ (respondidas + falhas).
+- **Bloqueios de guardrail:** mensagens ou respostas barradas pelas regras de segurança.
+- **Usuários ativos:** pessoas diferentes atendidas no período.
+- **Satisfação:** avaliações 👍 ÷ (👍 + 👎), e **taxa de sem resposta:** perguntas sem resposta ÷ respondidas (casos de qualidade).
+- **Tokens e custo estimado por modelo:** tokens consumidos × tabela de preços `MODEL_PRICES_JSON` (US$ por 1 milhão de tokens de entrada e de saída). Modelo sem preço configurado aparece sem custo e fica fora da soma. O custo também aparece em `/admin/usage`.
+
+Exportações (botões no Resumo e nas telas de Logs, Uso e Auditoria):
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| `/admin/logs/export.csv` | Log de acesso, com os mesmos filtros da tela |
+| `/admin/usage/export.csv?days=` | Uso diário (mensagens, usuários, chamadas e tokens) |
+| `/admin/export/quality.csv?kind=` | Casos de qualidade (avaliações e perguntas sem resposta) |
+| `/admin/export/audit.csv` | Auditoria, com os filtros da tela e o antes/depois em JSON |
+| `/admin/api/knowledge/export.json` | Todos os documentos da base de conhecimento (backup) |
+
+- Até 5.000 linhas por arquivo, geradas em streaming.
+- **Injeção de fórmula:** texto que começa com `=`, `+`, `-`, `@`, TAB ou quebra de linha ganha um apóstrofo na frente, para que planilhas não o executem como fórmula.
+- **LGPD:** o número do usuário (`chat_id`) sai mascarado (só os 4 últimos dígitos) e o nome não é exportado. A pergunta e a resposta dos casos de qualidade saem como estão, pois a revisão é a finalidade desses casos. Cada download fica registrado no log de acesso (`admin_export`, com o tipo exportado).
+
+**RN21 — Exportação de dados:** exportações do painel exigem administrador autenticado, mascaram o identificador do usuário, neutralizam fórmulas de planilha e ficam registradas no log de acesso.
+
+**História de usuário:** como administrador, quero ver no resumo a rapidez, os erros, a satisfação e o custo do assistente em um período, e baixar os dados em planilha, para acompanhar a qualidade do serviço e prestar contas. *Critérios de aceite:* o resumo mostra os indicadores e gráficos de 7, 30 ou 90 dias; cada exportação baixa um arquivo com o número do usuário mascarado.
+
+---
+
+## Saúde e Alertas
+
+`services/admin/health_service.py` e `services/admin/alert_service.py`. Página `/admin/health`.
+
+**Saúde.** O painel verifica, a cada 30 segundos, se cada peça de que o assistente depende responde: banco de dados (Postgres), Redis, as coleções de manuais e da base de conhecimento no banco vetorial, a API do SUAP, a OpenAI e cada plataforma de mensagem habilitada (WAHA: sessão do WhatsApp conectada; Telegram: webhook registrado e sem erro recente). A OpenAI não recebe chamada de teste, porque cada chamada tem custo: conta como saudável com a chave configurada, e a tela mostra a data do último consumo registrado. Cada verificação tem tempo limite; erros aparecem só pelo tipo, sem mensagens que possam conter segredos. A tela também mostra o último atendimento que falhou (do log de acesso).
+
+- **Reconectar:** para WAHA reinicia a sessão do WhatsApp; para Telegram registra o webhook de novo. O botão exige CSRF e a ação fica na auditoria (área `provider`, sem reversão).
+- O contrato dos providers (`providers/base.py`) ganhou `health()` e `reconnect()`; quem não implementa responde "sem verificação" e "não suportado".
+- **`/health` público:** responde só `{"status": "ok"}` (200) ou `{"status": "degraded"}` (503) conforme Postgres e Redis, para monitoramento externo. Não chama serviços pagos nem expõe detalhes.
+
+**Alertas.** Uma tarefa de fundo (`alert_loop`, iniciada junto com os workers da fila) avalia a cada `ALERT_INTERVAL_SECONDS`:
+
+| Regra | Dispara quando |
+|-------|----------------|
+| Fila cheia | pendentes acima de `ALERT_QUEUE_MAX_PENDING` |
+| Item travado | mensagem em atendimento há mais de `ALERT_PROCESSING_MAX_SECONDS` |
+| Taxa de falhas | nos últimos 15 min, com pelo menos 5 atendimentos, a proporção de falhas passa de `ALERT_ERROR_RATE` |
+| Componente fora | uma verificação de saúde falha `ALERT_PROBE_FAILURES` vezes seguidas |
+| Limite excedido | alguma mensagem foi recusada por limite diário ou orçamento de tokens desde a última verificação (só a contagem, sem identificar o usuário) |
+
+- Canais: Telegram (`ALERT_TELEGRAM_CHAT_ID`, exige o provider `telegram` habilitado) e e-mail (`ALERT_SMTP_*`). Cada canal fica desligado se não configurado; sem nenhum, o alerta vai só para o log da aplicação.
+- Deduplicação: a mesma regra não alerta de novo antes de `ALERT_COOLDOWN_SECONDS` (chave `suap:alert:cooldown:<regra>` no Redis).
+- Outras partes do sistema alertam por `alert_service.notify(regra, mensagem)` (ex.: orçamento de tokens excedido).
+
+**RN20 — Conteúdo dos alertas:** alertas enviados para fora do sistema (Telegram, e-mail) levam apenas contagens e nomes de componentes, nunca número de telefone, matrícula ou conteúdo de conversa.
+
+**História de usuário:** como administrador, quero ser avisado quando a fila trava, os erros sobem ou uma dependência cai, e poder reconectar o WhatsApp pelo painel, para restabelecer o atendimento sem acessar o servidor. *Critérios de aceite:* a tela mostra a situação de cada componente; um problema persistente gera um único aviso por período de silêncio; "Reconectar" fica registrado na auditoria.
 
 ---
 
 ## Agente ReAct
 
-`services/agent_orchestrator.py` — loop de tool calling (máx. `AGENT_MAX_ITERATIONS`; ao atingir o limite força uma síntese). Recebe o histórico da conversa (`THREAD_HISTORY_PAIRS` pares) para perguntas de acompanhamento.
+`services/chat/agent_orchestrator.py` — loop de tool calling (máx. `AGENT_MAX_ITERATIONS`; ao atingir o limite força uma síntese). Recebe o histórico da conversa (`THREAD_HISTORY_PAIRS` pares) para perguntas de acompanhamento.
 
 - **Sem token** no Redis (sessão expirada), o agente nem chama o LLM: responde pedindo novo login.
 - Injeta uma mensagem de sistema com **data/hora atual (BRT)** para resolver "hoje", "esse ano", "agora".
@@ -295,7 +487,7 @@ Segurança: regex validada ao salvar (padrão até 500 caracteres, detecção de
 | `search_manuals` | RAG nos manuais do SUAP (`manuais_suap_ifpi`) |
 | `search_knowledge` | Base de conhecimento do painel |
 | `load_skill` | Instruções de uma skill cadastrada |
-| Tools SUAP (abaixo) | `services/mcp_client.py` |
+| Tools SUAP (abaixo) | `services/chat/mcp_client.py` |
 
 ### Tools SUAP (`mcp_client.py`)
 
@@ -320,13 +512,18 @@ UI server-rendered (Jinja2 com autoescape + HTMX), sem build de frontend.
 
 | Página | Função |
 |--------|--------|
-| `/admin` | Resumo: fila (pendentes/em atendimento/falhas), regras de acesso, atendimentos do dia, versão do prompt |
+| `/admin` | Resumo: fila, regras de acesso, atendimentos do dia, versão do prompt, indicadores do período (latência, erros, guardrails, usuários, satisfação, custo) com gráficos e exportações |
 | `/admin/queue` | Fila em abas (pendentes, em atendimento, falhas, atendidas), cancelar/reenfileirar, auto-refresh |
 | `/admin/prompt` | Editor do system prompt, histórico e restauração |
 | `/admin/skills` | CRUD de skills e de guardrails, com botão "testar" |
-| `/admin/knowledge` | CRUD de documentos, upload, teste de busca |
-| `/admin/access` | Allowlist e blocklist |
+| `/admin/knowledge` | CRUD de documentos, upload, teste de busca, reindexar tudo e ver chunks |
+| `/admin/access` | Allowlist, blocklist e limites diários (padrão e por número) |
+| `/admin/users` | Busca de usuários, detalhe com uso do dia, bloquear, limite próprio e apagar dados (LGPD) |
 | `/admin/logs` | Log de acesso com filtros |
+| `/admin/audit` | Auditoria das alterações dos admins, com diff e reverter |
+| `/admin/health` | Saúde dos componentes, último atendimento com falha e reconectar provider |
+| `/admin/quality` | Respostas mal avaliadas, perguntas sem resposta (agrupadas) e satisfação |
+| `/admin/broadcast` | Mensagem em massa: redigir, pré-visualizar destinatários, confirmar, acompanhar e cancelar |
 
 Segurança do painel:
 - Login com `ADMIN_USERNAME`/`ADMIN_PASSWORD` (`secrets.compare_digest`).
@@ -372,7 +569,7 @@ O `Dockerfile` usa `python:3.12-slim` e inicia `uvicorn main:app` (1 worker). O 
 
 ### Subida
 
-As tabelas são criadas/migradas automaticamente (`init_db`): `user_auth`, `knowledge_document`, `access_rule`, `access_log`, `prompt_version`, `skill`, `guardrail` (colunas novas entram via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). Em seguida carregam os caches de ACL, prompt e skills/guardrails, os providers (`startup()`) e as tasks de background (recuperação da fila, workers, `_stale_cleaner`, retenção do log).
+As tabelas são criadas/migradas automaticamente (`init_db`): `user_auth`, `knowledge_document`, `access_rule`, `access_log`, `prompt_version`, `skill`, `guardrail`, `admin_user`, `llm_usage`, `admin_audit`, `qa_case`, `broadcast` (colunas novas entram via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). Em seguida carregam os caches de ACL, prompt e skills/guardrails, os providers (`startup()`) e as tasks de background (recuperação da fila, workers, `_stale_cleaner`, retenção do log, alertas).
 
 ### Testes
 
@@ -413,7 +610,7 @@ As tabelas são criadas/migradas automaticamente (`init_db`): `user_auth`, `know
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
 | `RESPONDER_QUALQUER_NUMERO` | `False` | Se `True`, só a blocklist barra |
-| `MAX_DAILY_MESSAGES` | `25` | Limite diário por aluno |
+| `MAX_DAILY_MESSAGES` | `25` | Limite diário por aluno, enquanto o painel não define outro padrão |
 | `SESSION_TTL_SECONDS` | `28800` | TTL do token de sessão (8h) |
 | `AGENT_MAX_ITERATIONS` | `5` | Iterações máximas do loop ReAct |
 | `THREAD_HISTORY_PAIRS` | `3` | Pares pergunta/resposta injetados no contexto |
@@ -448,6 +645,18 @@ As tabelas são criadas/migradas automaticamente (`init_db`): `user_auth`, `know
 | `ADMIN_SESSION_TTL_SECONDS` | `28800` | Duração da sessão |
 | `ACCESS_LOG_STORE_CONTENT` | `False` | Gravar texto da mensagem no log (LGPD) |
 | `ACCESS_LOG_RETENTION_DAYS` | `90` | Retenção do log |
+| `QA_CASE_RETENTION_DAYS` | `90` | Retenção dos casos de qualidade (feedback) |
+| `MODEL_PRICES_JSON` | preços de `gpt-4o`, `gpt-4o-mini`, `gpt-3.5-turbo` | USD por 1M tokens, `{"modelo": [entrada, saída]}`, para o custo estimado |
+| `DAILY_TOKEN_BUDGET` | `0` | Orçamento diário de tokens por usuário (0 = sem limite) |
+| `ALERT_TELEGRAM_CHAT_ID` | — | Chat do Telegram que recebe alertas (vazio = desligado) |
+| `ALERT_SMTP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_TO` | — / `587` | E-mail de alertas (host vazio = desligado) |
+| `ALERT_QUEUE_MAX_PENDING` | `50` | Alerta com mais itens pendentes que isso |
+| `ALERT_PROCESSING_MAX_SECONDS` | `180` | Alerta com item em atendimento há mais tempo que isso |
+| `ALERT_ERROR_RATE` | `0.2` | Alerta com taxa de falhas acima disso |
+| `ALERT_PROBE_FAILURES` | `3` | Falhas seguidas de uma verificação de saúde antes de alertar |
+| `ALERT_INTERVAL_SECONDS` | `60` | Intervalo entre rodadas de verificação dos alertas |
+| `ALERT_COOLDOWN_SECONDS` | `1800` | Silêncio mínimo entre dois alertas da mesma regra |
+| `BROADCAST_DELAY_SECONDS` | `3` | Intervalo entre envios de mensagem em massa |
 
 ### Base de conhecimento
 
@@ -473,13 +682,16 @@ As tabelas são criadas/migradas automaticamente (`init_db`): `user_auth`, `know
 | `POST` | `/auth/login?token={uuid}` | Autentica no SUAP |
 | `GET` | `/terms` | Termo de Compromisso de Uso em JSON (`version`, `effective_date`, `title`, `content` em markdown) |
 | `GET` | `/terms/view` | Mesmo termo como página HTML |
+| `GET` | `/health` | Status mínimo (Postgres e Redis) para monitoramento externo |
 
 ### Painel admin (sessão + CSRF nas escritas)
 
 | Método | Path | Descrição |
 |--------|------|-----------|
 | `GET/POST` | `/admin/login` · `POST /admin/logout` | Sessão |
-| `GET` | `/admin` | Resumo |
+| `GET` | `/admin?days=7\|30\|90` | Resumo e indicadores |
+| `GET` | `/admin/logs/export.csv` · `/admin/usage/export.csv` · `/admin/export/quality.csv` · `/admin/export/audit.csv` | Exportações CSV |
+| `GET` | `/admin/api/knowledge/export.json` | Exportação da base de conhecimento |
 | `GET` | `/admin/queue`, `/admin/queue/table` | Fila (página e parcial HTMX) |
 | `POST` | `/admin/queue/{id}/cancel` · `/requeue` | Cancelar pendente / reenfileirar falha |
 | `GET/POST` | `/admin/prompt` · `POST /admin/prompt/{id}/activate` | Editar e restaurar prompt |
@@ -490,8 +702,18 @@ As tabelas são criadas/migradas automaticamente (`init_db`): `user_auth`, `know
 | `GET/POST/PUT/DELETE` | `/admin/api/knowledge[/{id}]` | CRUD de documentos |
 | `POST` | `/admin/api/knowledge/upload` | Cria de `.txt`/`.md` |
 | `GET` | `/admin/api/knowledge/search?q=` | Testa a recuperação |
+| `GET/POST` | `/admin/api/knowledge/reindex` | Progresso / dispara a reindexação completa (409 se já rodando) |
+| `GET` | `/admin/api/knowledge/{id}/chunks` | Chunks gravados de um documento |
+| `GET/POST` | `/admin/broadcast` · `POST /admin/broadcast/{id}/send` · `/cancel` | Mensagem em massa |
+| `GET` | `/admin/broadcast/{id}/progress` | Parcial HTMX do progresso |
 | `GET/POST` | `/admin/access` · `POST /admin/access/remove` | Allowlist / blocklist |
+| `POST` | `/admin/access/limit` · `/admin/access/user-limit` | Limite diário padrão / por número |
+| `GET` | `/admin/users` · `/admin/users/{id}` | Busca e detalhe de usuário |
+| `POST` | `/admin/users/{id}/block` · `/unblock` · `/limit` · `/erase` | Bloquear, desbloquear, limite próprio, apagar dados |
 | `GET` | `/admin/logs` | Log de acesso |
+| `GET` | `/admin/audit` · `POST /admin/audit/{id}/revert` | Auditoria e reversão |
+| `GET` | `/admin/health` · `/admin/health/table` · `POST /admin/health/{provider}/reconnect` | Saúde, parcial HTMX e reconexão |
+| `GET` | `/admin/quality?tab=down\|no_answer` · `POST /admin/quality/{id}` · `/{id}/convert` | Casos de qualidade: nota/status e converter em documento |
 
 ---
 
@@ -505,3 +727,8 @@ As tabelas são criadas/migradas automaticamente (`init_db`): `user_auth`, `know
 - Painel com autoescape (sem XSS), CSRF, cookie assinado e throttle de login. Falha de login grava só o IP no log (nunca o usuário digitado); sem Redis o throttle é desativado com aviso, mas a senha continua exigida.
 - Telegram: secret do webhook comparado com `hmac.compare_digest`; logs do `httpx` silenciados para não vazar o token do bot na URL.
 - Regex de guardrails validadas contra ReDoS.
+- Alterações feitas no painel ficam auditadas com autor e estado antes/depois (RN15).
+- Alertas externos não levam dado pessoal (RN20); o `/health` público não expõe detalhes.
+- Feedback guarda conteúdo só em 👎 e "sem resposta", com retenção de `QA_CASE_RETENTION_DAYS` e usuário mascarado no painel (RN19).
+- Exclusão de dados a pedido do titular em `/admin/users`, auditada sem o número apagado; o número no consumo de tokens é anonimizado após a retenção (RN24).
+- Exportações mascaram o número do usuário, neutralizam fórmulas de planilha e ficam registradas no log (RN21).

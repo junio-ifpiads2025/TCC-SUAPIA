@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% from "_help.html" import help %}
 {% block title %}Prompt{% endblock %}
 {% block content %}
-<h1 class="h3 page-title mb-4">System prompt</h1>
+<h1 class="h3 page-title mb-4">System prompt {{ help('É o texto de instruções que o assistente lê antes de cada conversa: define o nome, o tom de voz e o que ele pode ou não fazer. Cada vez que você salva, é criada uma nova versão e as antigas ficam guardadas no histórico, então dá para voltar atrás. A mudança vale para as próximas mensagens.', 'Prompt do sistema') }}</h1>
 {% if msg %}<div class="alert alert-success"><i class="bi bi-check-circle me-1"></i>Ação concluída: {{ msg }}.</div>{% endif %}
 {% if error %}<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-1"></i>{{ error }}</div>{% endif %}
 
@@ -14,6 +15,8 @@
     </p>
     <form method="post" action="/admin/prompt">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="form-label small fw-semibold" for="agent_name">Nome do agente {{ help('Como o assistente se apresenta (menu, /about, boas-vindas e login). Também substitui {AGENT_NAME} no prompt. Fica salvo junto com a versão.') }}</label>
+      <input class="form-control mb-3" id="agent_name" name="agent_name" maxlength="50" value="{{ agent_name }}" required>
       <textarea class="form-control mb-3" name="content" rows="18" required>{{ content }}</textarea>
       <button class="btn btn-primary" type="submit"><i class="bi bi-save me-1"></i>Salvar nova versão</button>
     </form>
@@ -21,7 +24,7 @@
 </div>
 
 <div class="card">
-  <div class="card-header bg-transparent fw-semibold"><i class="bi bi-clock-history me-1"></i>Histórico</div>
+  <div class="card-header bg-transparent fw-semibold"><i class="bi bi-clock-history me-1"></i>Histórico {{ help('Todas as versões já salvas. Clique em Restaurar para voltar a usar uma versão anterior.') }}</div>
   <div class="table-responsive">
   <table class="table table-hover mb-0">
     <thead><tr><th>#</th><th>Autor</th><th>Criada em</th><th>Prévia</th><th></th></tr></thead>

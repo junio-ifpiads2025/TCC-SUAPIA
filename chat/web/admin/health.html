@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% from "_help.html" import help %}
+{% block title %}Saúde{% endblock %}
+{% block content %}
+<h1 class="h3 page-title mb-4">Saúde do sistema {{ help('Mostra se cada peça de que o assistente depende está funcionando: banco de dados, Redis, base de manuais, SUAP, OpenAI e as plataformas de mensagem. A tabela se atualiza sozinha a cada 30 segundos. Se uma plataforma cair, use Reconectar.') }}</h1>
+{% if msg %}<div class="alert {{ 'alert-danger' if msg.startswith('Erro') else 'alert-success' }} py-2">{{ msg }}</div>{% endif %}
+<div class="card">
+  <div id="health-table" hx-get="/admin/health/table" hx-trigger="every 30s" hx-swap="innerHTML">
+    {% include "_health_table.html" %}
+  </div>
+</div>
+<p class="small text-body-secondary mt-3 mb-0">A OpenAI não é testada com uma chamada real (teria custo): conta como saudável quando a chave está configurada. O endereço público <code>/health</code> informa só se o banco e o Redis respondem, para monitoramento externo.</p>
+{% endblock %}

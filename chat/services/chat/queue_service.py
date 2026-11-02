@@ -28,15 +28,18 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from config import MAX_DAILY_MESSAGES, QUEUE_MAX_ATTEMPTS, QUEUE_TIMEOUT_MINUTES
-from services.shared import access_log_service, logger, prompt_service
+import config
+from config import QUEUE_MAX_ATTEMPTS, QUEUE_TIMEOUT_MINUTES
+from services.shared import access_log_service, acl_service, logger, prompt_service, usage_service
 from services.shared.auth_service import generate_onboarding_link, logout
 from services.chat.message_router import route
 from services.chat.messaging_client import enviar_texto_async, marcar_lida_async, iniciar_digitacao_async
 from services.shared.session_service import (
     delete_token, increment_rate, is_authenticated, get_profile, delete_profile, get_redis,
+    get_tokens, signal_limit_exceeded,
 )
-from services.chat import thread_service
+from services.chat import feedback_service, thread_service
+from services.shared import qa_case_service
 
 PENDING = "suap:queue:pending"
 PROCESSING = "suap:queue:processing"
@@ -52,6 +55,14 @@ _KEYS = {"pending": PENDING, "processing": PROCESSING, "failed": FAILED, "done":
 # Trava por chat_id (dentro do processo) para manter FIFO por conversa
 # quando há mais de um consumidor.
 _chat_locks: dict[str, asyncio.Lock] = {}
+
+
+TOKEN_BUDGET_TEXT = ("Você atingiu o limite diário de uso do assistente. "
+                     "Tente novamente amanhã.")
+
+
+def daily_limit_text(limit: int) -> str:
+    return f"Você atingiu o limite de {limit} mensagens por dia. Tente novamente amanhã."
 
 
 def _provider_of(chat_id: str) -> str:
@@ -70,8 +81,14 @@ async def enqueue(chat_id: str, content: str, message_id: str | None = None) -> 
     Antes de enfileirar, executa validações em ordem:
       1. Comando /sair — encerra sessão imediatamente, sem enfileirar.
       2. Autenticação (RF01/RF10) — se não autenticado, envia link de onboarding.
-      3. Rate limit diário (RN06) — se cota esgotada, envia aviso.
-      4. Insere em suap:queue:pending (RF11).
+      3. Feedback "1"/"2" da última resposta — registra e agradece, sem LLM
+         e sem contar no limite diário.
+      4. Orçamento diário de tokens — se esgotado, envia aviso.
+      5. Rate limit diário (RN06) — limite efetivo do usuário (próprio ou
+         global, definido no painel); se esgotado, envia aviso.
+      6. Insere em suap:queue:pending (RF11).
+
+    Recusas por limite sinalizam o loop de alertas (contador sem chat_id).
     """
     provider = _provider_of(chat_id)
 
@@ -84,6 +101,7 @@ async def enqueue(chat_id: str, content: str, message_id: str | None = None) -> 
         await logout(chat_id)
         await delete_profile(chat_id)
         await thread_service.clear_thread(chat_id)  # apaga histórico junto com a sessão
+        await feedback_service.clear(chat_id)
         await enviar_texto_async(
             chat_id,
             "Sessão encerrada. Na próxima mensagem você receberá o link de login.",
@@ -101,14 +119,26 @@ async def enqueue(chat_id: str, content: str, message_id: str | None = None) -> 
         )
         return
 
+    # Resposta "1"/"2" a um pedido de feedback pendente não aciona o agente
+    agradecimento = await feedback_service.handle(chat_id, content)
+    if agradecimento:
+        await enviar_texto_async(chat_id, agradecimento)
+        return
+
+    budget = config.DAILY_TOKEN_BUDGET
+    if budget > 0 and await get_tokens(chat_id) >= budget:
+        access_log_service.log_event(chat_id, "rate_limited", provider=provider, detail="motivo=token_budget")
+        await signal_limit_exceeded("token_budget")
+        await enviar_texto_async(chat_id, TOKEN_BUDGET_TEXT)
+        return
+
     # RN06: incrementa contador diário antes de enfileirar
     count = await increment_rate(chat_id)
-    if count > MAX_DAILY_MESSAGES:
+    limit = acl_service.daily_limit(chat_id)
+    if count > limit:
         access_log_service.log_event(chat_id, "rate_limited", provider=provider)
-        await enviar_texto_async(
-            chat_id,
-            "Você atingiu o limite de 25 mensagens por dia. Tente novamente amanhã.",
-        )
+        await signal_limit_exceeded("daily_messages")
+        await enviar_texto_async(chat_id, daily_limit_text(limit))
         return
 
     item = {
@@ -144,14 +174,24 @@ async def _process_item(raw: str) -> None:
         try:
             logger.incoming(chat_id, item["content"])
             await iniciar_digitacao_async(chat_id)  # "digitando..." durante o LLM
-            resposta, _ = await route(chat_id, item["content"])
+            # chat_id do consumo de tokens; asyncio.to_thread copia o contexto para o agente
+            ctx = usage_service.current_chat_id.set(chat_id)
+            try:
+                resposta, meta = await route(chat_id, item["content"])
+            finally:
+                usage_service.current_chat_id.reset(ctx)
+            meta = meta or {}
+            texto = resposta
 
             profile = await get_profile(chat_id)
             if profile and profile.get("nome"):
-                resposta = f"{profile['nome'].split()[0]}, {resposta}"
+                texto = f"{profile['nome'].split()[0]}, {texto}"
+            if meta.get("ask_feedback"):
+                texto += feedback_service.FEEDBACK_PROMPT
 
-            logger.response_log(resposta)
-            await enviar_texto_async(chat_id, resposta)
+            logger.response_log(texto)
+            await enviar_texto_async(chat_id, texto)
+            await _track_quality(chat_id, item["content"], resposta, meta)
         except Exception as e:
             error = f"{type(e).__name__}: {e}"[:300]
             logger.error("QUEUE", f"Erro ao processar id={item_id} chat_id={chat_id}: {e}")
@@ -175,6 +215,20 @@ async def _process_item(raw: str) -> None:
     if removed:  # se não estava mais em processing, o cleanup já decidiu o destino
         item["error"] = error
         await _push_failed(item)
+
+
+async def _track_quality(chat_id: str, question: str, answer: str, meta: dict) -> None:
+    """
+    Sem resposta → grava o caso para revisão; resposta avaliável → arma o feedback.
+    Guarda a resposta sem o nome do usuário (LGPD). Falha aqui não afeta o atendimento.
+    """
+    try:
+        if meta.get("no_answer"):
+            await qa_case_service.record("no_answer", chat_id, question, answer, meta.get("chunks"))
+        elif meta.get("ask_feedback"):
+            await feedback_service.arm(chat_id, question, answer, meta.get("chunks"))
+    except Exception as e:
+        logger.warn("QUEUE", f"Falha ao registrar qualidade chat_id={chat_id}: {e}")
 
 
 async def _push_failed(item: dict) -> None:
@@ -256,6 +310,14 @@ async def stats() -> dict:
     }
 
 
+async def oldest_processing_seconds() -> float:
+    """Há quanto tempo (s) o item mais antigo está em atendimento; 0 se nenhum."""
+    started = await get_redis().hgetall(STARTED)
+    if not started:
+        return 0.0
+    return max(0.0, time.time() - min(float(ts) for ts in started.values()))
+
+
 async def list_items(which: str, limit: int = 200) -> list[dict]:
     """Itens da lista (pending: o mais antigo primeiro; demais: mais recente primeiro)."""
     key = _KEYS.get(which)
@@ -271,6 +333,19 @@ async def list_items(which: str, limit: int = 200) -> list[dict]:
         for it in items:
             it["started_at"] = started.get(it["id"])
     return items
+
+
+async def remove_user_items(chat_id: str) -> int:
+    """Apaga todos os itens do chat_id das listas da fila (exclusão de dados do titular)."""
+    r = get_redis()
+    n = 0
+    for key in _KEYS.values():
+        for raw in await r.lrange(key, 0, -1):
+            item = json.loads(raw)
+            if item.get("chat_id") == chat_id and await r.lrem(key, 1, raw):
+                await r.hdel(STARTED, item["id"])
+                n += 1
+    return n
 
 
 async def _find(key: str, item_id: str) -> str | None:

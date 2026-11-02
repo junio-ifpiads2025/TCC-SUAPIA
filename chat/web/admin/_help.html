@@ -1,0 +1,4 @@
+{# Botão "?" com explicação em linguagem simples (popover do Bootstrap, abre ao clicar/tocar). #}
+{% macro help(text, title='') -%}
+<button type="button" class="help-btn" data-bs-toggle="popover" data-bs-trigger="focus" data-bs-placement="auto"{% if title %} data-bs-title="{{ title }}"{% endif %} data-bs-content="{{ text }}" aria-label="Ajuda{% if title %}: {{ title }}{% endif %}">?</button>
+{%- endmacro %}

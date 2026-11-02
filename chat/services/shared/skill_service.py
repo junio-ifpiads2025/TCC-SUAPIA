@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from models.database import AsyncSessionLocal, Skill
+from services.shared import audit_service
 
 _SLUG = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
 MAX_BODY_LEN = 20000
@@ -30,6 +31,11 @@ class SkillNotFound(LookupError):
 def _to_dict(s: Skill) -> dict:
     return {"slug": s.slug, "name": s.name, "description": s.description or "",
             "body": s.body, "updated_at": s.updated_at}
+
+
+def _snapshot(s: dict | None) -> dict | None:
+    """Campos editáveis (sem datas), usados na auditoria e na reversão."""
+    return None if s is None else {k: s[k] for k in ("slug", "name", "description", "body")}
 
 
 def _clean(data: dict) -> dict:
@@ -133,15 +139,21 @@ async def create_skill(slug: str, data: dict) -> dict:
         raise SkillError("Slug inválido (letras, números, '-' e '_', máx. 80).")
     row = await _db_insert(slug, _clean(data))
     await _reload()
+    await audit_service.record("create", "skill", slug, None, _snapshot(row))
     return row
 
 
 async def update_skill(slug: str, data: dict) -> dict:
-    row = await _db_update(slug, _clean(data))
+    values = _clean(data)
+    before = await _db_get(slug)
+    row = await _db_update(slug, values)
     await _reload()
+    await audit_service.record("update", "skill", slug, _snapshot(before), _snapshot(row))
     return row
 
 
 async def delete_skill(slug: str) -> None:
+    before = await _db_get(slug)
     await _db_delete(slug)
     await _reload()
+    await audit_service.record("delete", "skill", slug, _snapshot(before), None)

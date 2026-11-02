@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_help.html" import help %}
+{% block title %}Qualidade{% endblock %}
+{% block content %}
+<h1 class="h3 page-title mb-4">Qualidade das respostas {{ help('Depois de cada resposta, o assistente pergunta se ela foi útil (1 = sim, 2 = não). Aqui aparecem as respostas marcadas como não úteis e as perguntas que o assistente não soube responder, para você corrigir a base de conhecimento.') }}</h1>
+{% if msg %}<div class="alert {{ 'alert-danger' if msg.startswith('Erro') else 'alert-success' }} py-2">{{ msg }}</div>{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="card card-body">
+    <div class="small text-body-secondary">Satisfação ({{ stats.days }} dias) {{ help('Percentual de respostas úteis entre as que foram avaliadas.') }}</div>
+    <div class="fs-3 fw-semibold">{{ stats.rate ~ '%' if stats.rate is not none else '—' }}</div>
+  </div></div>
+  <div class="col-6 col-lg-3"><div class="card card-body">
+    <div class="small text-body-secondary">👍 Úteis</div><div class="fs-3 fw-semibold">{{ stats.up }}</div>
+  </div></div>
+  <div class="col-6 col-lg-3"><div class="card card-body">
+    <div class="small text-body-secondary">👎 Não úteis</div><div class="fs-3 fw-semibold">{{ stats.down }}</div>
+  </div></div>
+  <div class="col-6 col-lg-3"><div class="card card-body">
+    <div class="small text-body-secondary">Sem resposta</div><div class="fs-3 fw-semibold">{{ stats.no_answer }}</div>
+  </div></div>
+</div>
+
+<ul class="nav nav-tabs mb-3">
+  {% for key, label in tabs.items() %}
+  <li class="nav-item"><a class="nav-link {{ 'active' if key == tab else '' }}" href="/admin/quality?tab={{ key }}">{{ label }}</a></li>
+  {% endfor %}
+</ul>
+
+{% if tab == 'no_answer' and groups %}
+<div class="card mb-3"><div class="card-body">
+  <h2 class="h6 mb-3">Perguntas parecidas {{ help('Perguntas sem resposta agrupadas por palavras em comum. Os grupos maiores indicam os assuntos que mais faltam na base de conhecimento.') }}</h2>
+  <ul class="list-group list-group-flush">
+    {% for g in groups[:15] %}
+    <li class="list-group-item d-flex justify-content-between align-items-start gap-2">
+      <span class="text-break">{{ g.question | truncate(200) }}</span>
+      <span class="badge text-bg-primary rounded-pill">{{ g.count }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div></div>
+{% endif %}
+
+{% for c in cases %}
+<div class="card mb-3"><div class="card-body">
+  <div class="d-flex flex-wrap justify-content-between gap-2 mb-2 small text-body-secondary">
+    <span>{{ c.created_at.strftime('%d/%m/%Y %H:%M') if c.created_at else '' }} · usuário {{ c.chat_id_masked }}</span>
+    <span class="badge {{ 'text-bg-success' if c.status == 'converted' else ('text-bg-secondary' if c.status == 'reviewed' else 'text-bg-warning') }}">{{ c.status }}</span>
+  </div>
+  <div class="mb-2"><strong>Pergunta:</strong> <span class="text-break" style="white-space: pre-wrap">{{ c.question or '—' }}</span></div>
+  <details class="mb-2">
+    <summary class="small">Resposta do assistente{% if c.chunks %} e {{ c.chunks | length }} trecho(s) usado(s){% endif %}</summary>
+    <div class="small mt-2 text-break" style="white-space: pre-wrap">{{ c.answer or '—' }}</div>
+    {% if c.chunks %}
+    <ul class="small mt-2 mb-0">
+      {% for ch in c.chunks %}<li>{{ ch.titulo or ch.title or ch.source or ch.doc_id or 'trecho' }}{% if ch.fonte %} <span class="text-body-secondary">({{ ch.fonte }})</span>{% endif %}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </details>
+  <div class="row g-2 align-items-end">
+    <form method="post" action="/admin/quality/{{ c.id }}" class="col-12 col-lg-9 row g-2 m-0 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="tab" value="{{ tab }}">
+      <div class="col-12 col-md-7"><input class="form-control form-control-sm" name="note" value="{{ c.note or '' }}" placeholder="Nota do admin" maxlength="2000"></div>
+      <div class="col-6 col-md-3">
+        <select class="form-select form-select-sm" name="status">
+          {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if s == c.status else '' }}>{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2 d-grid"><button class="btn btn-sm btn-outline-primary" type="submit">Salvar</button></div>
+    </form>
+    <form method="post" action="/admin/quality/{{ c.id }}/convert" class="col-12 col-lg-3 d-grid m-0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="tab" value="{{ tab }}">
+      <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-journal-plus me-1"></i>Converter em documento</button>
+    </form>
+  </div>
+</div></div>
+{% else %}
+<div class="card card-body text-center text-body-secondary">Nenhum caso.</div>
+{% endfor %}
+{% endblock %}

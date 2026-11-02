@@ -14,12 +14,14 @@ from fastapi import FastAPI
 
 from models.database import init_db
 from routes.admin import router as admin_router
-from routes.auth import router as auth_router
-from routes.terms import router as terms_router
-from routes.webhook import router as webhook_router
-from services import access_log_service, acl_service, logger, prompt_service, skill_service, usage_service
-from services import providers
-from services import queue_service
+from routes.admin.health import public_router as health_router
+from routes.chat.auth import router as auth_router
+from routes.chat.terms import router as terms_router
+from routes.chat.webhook import router as webhook_router
+from services.shared import access_log_service, acl_service, logger, prompt_service, skill_service, usage_service
+from services.chat import providers
+from services.chat import queue_service
+from services.admin import alert_service
 from config import AGENT_NAME, QUEUE_CONSUMERS
 
 
@@ -75,6 +77,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(_queue_worker())
     asyncio.create_task(_stale_cleaner())
     asyncio.create_task(access_log_service.retention_loop())
+    asyncio.create_task(alert_service.alert_loop())
     logger.success("BOOT", "Tasks de background iniciadas")
 
     yield
@@ -87,3 +90,4 @@ app.include_router(webhook_router)   # POST /webhook
 app.include_router(auth_router)      # GET/POST /auth/login
 app.include_router(terms_router)     # GET /terms, GET /terms/view
 app.include_router(admin_router)     # GET /admin/queue
+app.include_router(health_router)    # GET /health (público, sem detalhes)

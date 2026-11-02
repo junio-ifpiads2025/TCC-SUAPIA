@@ -16,7 +16,7 @@ from sqlalchemy import delete, func, or_, select
 
 import config
 from models.database import AccessLog, AsyncSessionLocal, UserAuth
-from services.shared import logger, session_service
+from services.shared import logger, qa_case_service, session_service, usage_service
 
 _SAFE_DETAIL = re.compile(r"^[a-z_]+=[\w.\-:@]{0,64}( [a-z_]+=[\w.\-:@]{0,64})*$")
 _tasks: set = set()
@@ -160,12 +160,16 @@ async def purge() -> int:
 
 
 async def retention_loop(interval_seconds: int = 86400) -> None:
-    """Task de fundo (lifespan): purga diária. Erros não encerram o loop."""
+    """
+    Task de fundo (lifespan): purga diária do log de acesso e dos casos de
+    qualidade, e anonimização do chat_id no consumo de tokens (LGPD). Erros não encerram o loop e uma purga não impede a outra.
+    """
     while True:
-        try:
-            await purge()
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.warn("ACCESS_LOG", f"Falha na purga: {e}")
+        for fn in (purge, qa_case_service.purge, usage_service.anonymize):
+            try:
+                await fn()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warn("ACCESS_LOG", f"Falha na purga ({fn.__module__}): {e}")
         await asyncio.sleep(interval_seconds)

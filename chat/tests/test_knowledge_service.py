@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 from models.database import KnowledgeDocument
-from services import knowledge_service as ks
+from services.shared import knowledge_service as ks
 
 
 class FakeStore:

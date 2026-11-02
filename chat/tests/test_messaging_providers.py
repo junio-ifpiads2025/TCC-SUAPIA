@@ -3,9 +3,9 @@ import asyncio
 import pytest
 from fastapi import Request
 
-from services import messaging_client, providers
-from services.providers import IncomingMessage, InvalidPayload, MessagingProvider
-from services.providers.waha import WahaProvider
+from services.chat import messaging_client, providers
+from services.chat.providers import IncomingMessage, InvalidPayload, MessagingProvider
+from services.chat.providers.waha import WahaProvider
 
 
 class FakeProvider(MessagingProvider):
@@ -106,7 +106,7 @@ def test_waha_missing_sender_is_invalid():
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
 
-from services.providers import telegram as tg  # noqa: E402
+from services.chat.providers import telegram as tg  # noqa: E402
 
 
 def _tg_request(body: dict, secret: str | None = None) -> Request:

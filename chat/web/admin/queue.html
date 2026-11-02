@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% from "_help.html" import help %}
 {% block title %}Fila{% endblock %}
 {% block content %}
-<h1 class="h3 page-title mb-4">Fila de atendimento</h1>
+<h1 class="h3 page-title mb-4">Fila de atendimento {{ help('Mostra as mensagens dos usuários na ordem em que chegam. A lista se atualiza sozinha a cada 5 segundos. Em Pendentes você pode cancelar uma mensagem; em Falhas, tentar de novo (Reenfileirar). Atendidas são as já respondidas.') }}</h1>
 <ul class="nav nav-pills mb-3 gap-1">
   <li class="nav-item"><a class="nav-link {{ 'active' if which == 'pending' }}" href="/admin/queue?which=pending">Pendentes <span class="badge text-bg-light">{{ counts.pending }}</span></a></li>
   <li class="nav-item"><a class="nav-link {{ 'active' if which == 'processing' }}" href="/admin/queue?which=processing">Em atendimento <span class="badge text-bg-light">{{ counts.processing }}</span></a></li>

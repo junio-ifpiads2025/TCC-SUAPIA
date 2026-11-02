@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from routes.admin.common import render, require_admin, verify_csrf
-from services.shared import access_log_service, prompt_service
+from services.shared import prompt_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -31,7 +31,6 @@ async def prompt_save(request: Request, content: str = Form(""), agent_name: str
         v = await prompt_service.save(content, admin, agent_name)
     except prompt_service.PromptError as e:
         return await _page(request, 422, error=str(e), draft=content, name=agent_name)
-    access_log_service.log_admin(admin, "prompt_save", f"version={v['id']}")
     return RedirectResponse("/admin/prompt?msg=salvo", status_code=303)
 
 
@@ -42,5 +41,4 @@ async def prompt_activate(request: Request, version_id: int, admin: str = Depend
         await prompt_service.activate(version_id)
     except prompt_service.PromptNotFound:
         return await _page(request, 404, error="Versão não encontrada.")
-    access_log_service.log_admin(admin, "prompt_activate", f"version={version_id}")
     return RedirectResponse("/admin/prompt?msg=restaurado", status_code=303)

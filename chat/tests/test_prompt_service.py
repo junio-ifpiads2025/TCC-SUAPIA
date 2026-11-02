@@ -12,8 +12,8 @@ def arun(fn):
 
 import pytest
 
-from services import guardrail_service as gs
-from services import prompt_service as ps
+from services.shared import guardrail_service as gs
+from services.shared import prompt_service as ps
 
 
 @pytest.fixture
@@ -23,10 +23,10 @@ def db(monkeypatch):
     async def active():
         return next((v for v in versions if v["active"]), None)
 
-    async def insert(content, author):
+    async def insert(content, author, agent_name=None):
         for v in versions:
             v["active"] = False
-        v = {"id": len(versions) + 1, "content": content, "active": True, "author": author, "created_at": "t"}
+        v = {"id": len(versions) + 1, "content": content, "active": True, "author": author, "agent_name": agent_name, "created_at": "t"}
         versions.append(v)
         return v
 
@@ -93,3 +93,19 @@ async def test_instruction_block_appended(db, monkeypatch):
         "match_type": None, "pattern": None}]))
     out = ps.get_system_prompt()
     assert out.startswith("base") and "Regras de comportamento" in out and "Seja breve." in out
+
+
+@arun
+async def test_agent_name_from_version_with_env_fallback(db):
+    from config import AGENT_NAME
+    assert ps.agent_name() == AGENT_NAME
+    await ps.save("Sou {AGENT_NAME}", "adm", "  Sidi ")
+    assert ps.agent_name() == "Sidi" and ps.get_system_prompt() == "Sou Sidi"
+    await ps.save("x", "adm", "")
+    assert ps.agent_name() == AGENT_NAME
+
+
+@arun
+async def test_agent_name_too_long(db):
+    with pytest.raises(ps.PromptError):
+        await ps.save("x", "adm", "a" * 51)

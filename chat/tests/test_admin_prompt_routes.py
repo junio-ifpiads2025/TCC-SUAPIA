@@ -2,11 +2,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from routes import admin_prompt, admin_skills
-from routes.admin_common import require_admin, verify_csrf
-from services import guardrail_service as gs
-from services import prompt_service as ps
-from services import skill_service as ss
+from routes.admin import prompt as admin_prompt, skills as admin_skills
+from routes.admin.common import require_admin, verify_csrf
+from services.shared import guardrail_service as gs
+from services.shared import prompt_service as ps
+from services.shared import skill_service as ss
 
 
 @pytest.fixture
@@ -16,10 +16,10 @@ def client(monkeypatch):
     async def lst():
         return list(reversed(versions))
 
-    async def insert(content, author):
+    async def insert(content, author, agent_name=None):
         for v in versions:
             v["active"] = False
-        v = {"id": len(versions) + 1, "content": content, "active": True, "author": author, "created_at": "t"}
+        v = {"id": len(versions) + 1, "content": content, "active": True, "author": author, "agent_name": agent_name, "created_at": "t"}
         versions.append(v)
         return v
 

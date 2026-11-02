@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from config import KNOWLEDGE_MAX_CHARS
 from routes.admin.common import render, require_admin, verify_csrf
-from services.shared import access_log_service, knowledge_service
+from services.shared import knowledge_service
 from services.shared.knowledge_service import KnowledgeError, KnowledgeNotFound
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -35,8 +35,9 @@ async def _call(coro):
 
 
 @router.get("/knowledge", response_class=HTMLResponse)
-async def knowledge_page(request: Request, admin: str = Depends(require_admin)):
-    return render(request, "knowledge.html", max_chars=KNOWLEDGE_MAX_CHARS)
+async def knowledge_page(request: Request, title: str = "", admin: str = Depends(require_admin)):
+    # `title` vem de "Converter em documento" (/admin/quality) e pré-preenche o formulário
+    return render(request, "knowledge.html", max_chars=KNOWLEDGE_MAX_CHARS, prefill_title=title[:200])
 
 
 @router.get("/api/knowledge", dependencies=[Depends(require_admin)])
@@ -51,6 +52,24 @@ async def search(q: str):
     return {"context": context, "metadata": metadata}
 
 
+@router.get("/api/knowledge/reindex", dependencies=[Depends(require_admin)])
+async def reindex_status():
+    return await knowledge_service.reindex_status() or {"status": "idle"}
+
+
+@router.post("/api/knowledge/reindex", status_code=202,
+             dependencies=[Depends(require_admin), Depends(verify_csrf)])
+async def reindex_start():
+    if not await knowledge_service.start_reindex():
+        raise HTTPException(status_code=409, detail="Já existe uma reindexação em andamento.")
+    return {"status": "running"}
+
+
+@router.get("/api/knowledge/{doc_id}/chunks", dependencies=[Depends(require_admin)])
+async def list_chunks(doc_id: str):
+    return await _call(knowledge_service.list_chunks(doc_id))
+
+
 @router.get("/api/knowledge/{doc_id}", dependencies=[Depends(require_admin)])
 async def get_document(doc_id: str):
     return await _call(knowledge_service.get_document(doc_id))
@@ -59,7 +78,6 @@ async def get_document(doc_id: str):
 @router.post("/api/knowledge", status_code=201, dependencies=[Depends(require_admin), Depends(verify_csrf)])
 async def create_document(body: KnowledgeCreate, admin: str = Depends(require_admin)):
     doc = await _call(knowledge_service.create_document(body.title, body.content))
-    access_log_service.log_admin(admin, "knowledge_create", f"doc={doc.get('id', '')}")
     return doc
 
 
@@ -73,19 +91,16 @@ async def upload_document(file: UploadFile = File(...), title: str = Form(""),
         raise HTTPException(status_code=415, detail="Envie um arquivo de texto UTF-8 (.txt ou .md).")
     name = (file.filename or "documento").rsplit(".", 1)[0]
     doc = await _call(knowledge_service.create_document(title.strip() or name, content))
-    access_log_service.log_admin(admin, "knowledge_create", f"doc={doc.get('id', '')}")
     return doc
 
 
 @router.put("/api/knowledge/{doc_id}", dependencies=[Depends(require_admin), Depends(verify_csrf)])
 async def update_document(doc_id: str, body: KnowledgeUpdate, admin: str = Depends(require_admin)):
     doc = await _call(knowledge_service.update_document(doc_id, body.title, body.content))
-    access_log_service.log_admin(admin, "knowledge_update", f"doc={doc_id}")
     return doc
 
 
 @router.delete("/api/knowledge/{doc_id}", status_code=204, dependencies=[Depends(require_admin), Depends(verify_csrf)])
 async def delete_document(doc_id: str, admin: str = Depends(require_admin)):
     await _call(knowledge_service.delete_document(doc_id))
-    access_log_service.log_admin(admin, "knowledge_delete", f"doc={doc_id}")
     return Response(status_code=204)

@@ -3,9 +3,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from routes import admin_auth, admin_common
+from routes.admin import auth as admin_auth, common as admin_common
 from routes.admin import router
-from services import knowledge_service as ks
+from services.shared import knowledge_service as ks
 
 
 @pytest.fixture

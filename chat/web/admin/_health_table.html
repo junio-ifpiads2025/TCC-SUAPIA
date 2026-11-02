@@ -1,0 +1,26 @@
+<div class="table-responsive">
+<table class="table mb-0">
+  <thead><tr><th>Componente</th><th>Situação</th><th>Detalhe</th><th>ms</th><th></th></tr></thead>
+  <tbody>
+  {% for c in checks %}
+  <tr>
+    <td class="fw-semibold">{{ c.name }}</td>
+    <td>{% if c.ok %}<span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>ok</span>{% else %}<span class="badge text-bg-danger"><i class="bi bi-x-circle me-1"></i>falha</span>{% endif %}</td>
+    <td class="small">{{ c.detail }}</td>
+    <td class="small text-body-secondary">{{ c.ms }}</td>
+    <td class="text-end">
+      {% if c.provider %}
+      <form method="post" action="/admin/health/{{ c.name }}/reconnect" class="m-0" onsubmit="return confirm('Reconectar {{ c.name }}?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-arrow-repeat me-1"></i>Reconectar</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<div class="card-footer small text-body-secondary">
+  Último atendimento com falha: {{ last_failure.strftime('%d/%m/%Y %H:%M:%S') if last_failure else 'nenhum registrado' }}
+</div>

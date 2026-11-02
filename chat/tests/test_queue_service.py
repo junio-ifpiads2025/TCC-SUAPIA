@@ -4,7 +4,8 @@ import time
 import fakeredis.aioredis
 import pytest
 
-from services import queue_service as qs
+from services.chat import queue_service as qs
+from services.shared import session_service
 
 pytestmark = pytest.mark.anyio
 
@@ -18,6 +19,7 @@ def anyio_backend():
 def redis(monkeypatch):
     r = fakeredis.aioredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(qs, "get_redis", lambda: r)
+    monkeypatch.setattr(session_service, "get_redis", lambda: r)
     events = []
     monkeypatch.setattr(qs.access_log_service, "log_event",
                         lambda chat_id, event, **kw: events.append((chat_id, event, kw)))

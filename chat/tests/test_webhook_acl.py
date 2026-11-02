@@ -6,8 +6,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import config
-from routes import webhook
-from services import acl_service as acl, access_log_service as als
+from routes.chat import webhook
+from services.shared import acl_service as acl, access_log_service as als
 
 
 class FakeProvider:

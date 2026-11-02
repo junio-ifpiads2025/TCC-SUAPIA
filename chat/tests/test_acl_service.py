@@ -1,6 +1,6 @@
 import pytest
 import config
-from services import acl_service as acl
+from services.shared import acl_service as acl
 
 pytestmark = pytest.mark.anyio
 
@@ -19,6 +19,19 @@ def db(monkeypatch):
     async def delete(chat_id):
         store.pop(chat_id, None)
 
+    async def get(chat_id):
+        return {"chat_id": chat_id, "kind": store[chat_id], "reason": None} if chat_id in store else None
+
+    async def none(*a):
+        return None
+
+    async def no_limits():
+        return {}
+
+    monkeypatch.setattr(acl, "_db_get", get)
+    monkeypatch.setattr(acl, "_db_get_open", none)
+    monkeypatch.setattr(acl, "_db_get_setting", none)
+    monkeypatch.setattr(acl, "_db_limits", no_limits)
     monkeypatch.setattr(acl, "_db_all", all_)
     monkeypatch.setattr(acl, "_db_upsert", upsert)
     monkeypatch.setattr(acl, "_db_delete", delete)
@@ -77,3 +90,12 @@ async def test_block_clears_session_when_asked(db, monkeypatch):
     await acl.add_rule("b", "block", clear_session=True)
     await acl.add_rule("c", "allow", clear_session=True)
     assert cleared == ["b"]
+
+
+def test_open_mode_override_beats_env(monkeypatch):
+    monkeypatch.setattr(config, "RESPONDER_QUALQUER_NUMERO", False)
+    monkeypatch.setattr(acl, "_open_mode", True)
+    acl._allow.clear(); acl._block.clear()
+    assert acl.check("x") == "ok"
+    acl._block.add("x")
+    assert acl.check("x") == "blocked"

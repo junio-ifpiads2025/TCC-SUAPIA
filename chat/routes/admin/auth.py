@@ -15,7 +15,7 @@ from routes.admin.common import (
     templates,
     verify_csrf,
 )
-from services.shared import access_log_service, auth_service
+from services.shared import access_log_service, auth_service, dashboard_service
 from services.admin import admin_user_service
 from services.shared.session_service import get_redis
 
@@ -24,6 +24,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 MAX_FAILURES = 5
 LOCK_WINDOW_SECONDS = 15 * 60
+DASHBOARD_PERIODS = (7, 30, 90)
 
 
 def _fail_key(request: Request) -> str:
@@ -142,9 +143,12 @@ def _prompt_info():
 
 
 @router.get("", response_class=HTMLResponse)
-async def dashboard(request: Request, admin: str = Depends(require_admin)):
+async def dashboard(request: Request, days: int = 7, admin: str = Depends(require_admin)):
+    days = days if days in DASHBOARD_PERIODS else 7
     queue = await _safe(_queue_stats, {"pending": 0, "processing": 0, "failed": 0})
     acl = await _safe(_acl_counts, {"allow": 0, "block": 0})
     answered = await _safe(lambda: access_log_service.count_today("answered"), 0)
     prompt = await _safe(_prompt_info, None)
-    return render(request, "dashboard.html", queue=queue, acl=acl, answered=answered, prompt=prompt)
+    metrics = await _safe(lambda: dashboard_service.report(days), None)
+    return render(request, "dashboard.html", queue=queue, acl=acl, answered=answered, prompt=prompt,
+                  metrics=metrics, days=days, periods=DASHBOARD_PERIODS)

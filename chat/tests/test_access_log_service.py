@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 import config
-from services import access_log_service as als
+from services.shared import access_log_service as als
 
 pytestmark = pytest.mark.anyio
 

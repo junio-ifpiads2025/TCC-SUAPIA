@@ -74,3 +74,13 @@ class MessagingProvider(ABC):
 
     async def iniciar_digitacao(self, chat_id: str) -> None:
         """Mostra o indicador 'digitando...' durante o processamento do LLM."""
+
+    async def health(self) -> tuple[bool, str]:
+        """(ok, detalhe curto) da conexão com a plataforma. Não deve levantar exceção
+        nem devolver segredos ou dados pessoais no detalhe."""
+        return True, "sem verificação para este provider"
+
+    async def reconnect(self) -> bool:
+        """Tenta restabelecer a conexão (ex.: reiniciar sessão, refazer webhook).
+        Retorna True se a plataforma aceitou; False se falhou ou não é suportado."""
+        return False

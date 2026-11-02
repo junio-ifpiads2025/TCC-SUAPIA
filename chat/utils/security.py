@@ -18,3 +18,17 @@ def sanitize_log(data: dict) -> dict:
         k: "***" if k.lower() in _SENSITIVE_KEYS else v
         for k, v in data.items()
     }
+
+
+def mask_chat_id(chat_id: str | None) -> str:
+    """
+    LGPD: identificador do usuário para telas e exportações, só com os 4 últimos
+    dígitos (`•••1234`). Ids curtos não revelam nada; `admin:<usuário>` passa intacto.
+    """
+    chat_id = str(chat_id or "")
+    if not chat_id:
+        return ""
+    if chat_id.startswith("admin:"):
+        return chat_id
+    digits = "".join(c for c in chat_id.split("@")[0] if c.isdigit())
+    return "•••" + (digits[-4:] if len(digits) > 4 else "")

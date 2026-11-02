@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from utils.security import mask_chat_id
 from routes.admin.common import render, require_admin, verify_csrf
 from services.shared import access_log_service
 from services.chat import queue_service
@@ -17,17 +18,11 @@ def _which(value: str) -> str:
     return value
 
 
-def _mascarar_chat(chat_id) -> str:
-    """Mantém só os 4 últimos dígitos do identificador (telefone/JID)."""
-    digitos = "".join(c for c in str(chat_id or "").split("@")[0] if c.isalnum())
-    return "…" + digitos[-4:] if len(digitos) > 4 else "…"
-
-
 def _sanitizar(item: dict) -> dict:
     """Minimização de dados (LGPD): o painel não exibe conteúdo da conversa nem o telefone completo."""
     return {
         **{k: v for k, v in item.items() if k not in ("content", "response", "chat_id")},
-        "chat_id": _mascarar_chat(item.get("chat_id")),
+        "chat_id": mask_chat_id(item.get("chat_id")),
         "content_len": len(item.get("content") or ""),
         "response_len": len(item.get("response") or ""),
     }

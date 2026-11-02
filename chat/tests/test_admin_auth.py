@@ -4,9 +4,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from itsdangerous import URLSafeTimedSerializer
 
-from routes import admin_auth, admin_common
+from routes.admin import auth as admin_auth, common as admin_common
 from routes.admin import router
-from services import access_log_service
+from services.shared import access_log_service
 
 
 @pytest.fixture
@@ -17,6 +17,10 @@ def client(monkeypatch):
     fake = fakeredis.FakeAsyncRedis(decode_responses=True)
     monkeypatch.setattr(admin_auth, "get_redis", lambda: fake)
     monkeypatch.setattr(admin_auth, "_queue_stats", lambda: {"pending": 1, "processing": 0, "failed": 0})
+
+    async def no_metrics(days):
+        raise RuntimeError("sem banco nos testes")
+    monkeypatch.setattr(admin_auth.dashboard_service, "report", no_metrics)
     app = FastAPI()
     app.include_router(router)
     return TestClient(app, follow_redirects=False)
@@ -108,7 +112,8 @@ def test_disabled_without_password_or_secret(client, monkeypatch):
 # ── login por matrícula SUAP ─────────────────────────────────────────────────
 
 def _suap(monkeypatch, admins=("2024001",), valid=True):
-    from services import admin_user_service, auth_service
+    from services.admin import admin_user_service
+    from services.shared import auth_service
 
     async def is_admin(m):
         return m in admins
@@ -134,7 +139,7 @@ def test_suap_login_wrong_password(client, monkeypatch):
 
 
 def test_suap_login_not_admin_never_hits_suap(client, monkeypatch):
-    from services import auth_service
+    from services.shared import auth_service
     _suap(monkeypatch)
 
     async def boom(m, s):
@@ -146,7 +151,7 @@ def test_suap_login_not_admin_never_hits_suap(client, monkeypatch):
 
 
 def test_suap_unavailable(client, monkeypatch):
-    from services import auth_service
+    from services.shared import auth_service
     _suap(monkeypatch)
 
     async def down(m, s):
@@ -168,7 +173,7 @@ def test_removed_admin_loses_session(client, monkeypatch):
 
 
 def test_bootstrap_session_skips_db(client, monkeypatch):
-    from services import admin_user_service
+    from services.admin import admin_user_service
 
     async def boom(m):
         raise AssertionError("bootstrap não consulta o banco")

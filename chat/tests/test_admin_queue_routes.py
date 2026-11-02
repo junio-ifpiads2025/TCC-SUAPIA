@@ -5,9 +5,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from routes import admin_queue
-from routes.admin_common import require_admin, verify_csrf
-from services import queue_service as qs
+from routes.admin import queue as admin_queue
+from routes.admin.common import require_admin, verify_csrf
+from services.chat import queue_service as qs
 
 
 
@@ -57,7 +57,7 @@ def test_nao_exibe_dados_pessoais(client):
     _seed(client, qs.DONE, chat_id="5586999887766@c.us", content="<script>meu cpf 123</script>",
           response="resposta secreta", duration_ms=1000)
     html = client.get("/admin/queue/table?which=done").text
-    assert "5586999887766" not in html and "…7766" in html
+    assert "5586999887766" not in html and "•••7766" in html
     assert "meu cpf" not in html and "<script>" not in html
     assert "resposta secreta" not in html
 

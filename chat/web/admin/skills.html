@@ -1,22 +1,23 @@
 {% extends "base.html" %}
+{% from "_help.html" import help %}
 {% block title %}Skills e guardrails{% endblock %}
 {% macro rule_fields(g) %}
   <div class="row g-3">
     <div class="col-md-4"><label class="form-label small">Nome</label><input class="form-control" name="name" value="{{ g.name if g else '' }}" required maxlength="100" placeholder="Bloquear CPF"></div>
     <div class="col-md-8"><label class="form-label small">Descrição</label><input class="form-control" name="description" value="{{ (g.description if g else '') or '' }}" placeholder="Impede o envio de CPF na conversa"></div>
-    <div class="col-6 col-md-3"><label class="form-label small">Escopo</label>
+    <div class="col-6 col-md-3"><label class="form-label small">Escopo {{ help('Onde a regra atua. input: na mensagem do usuário. output: na resposta do assistente. prompt: vira uma instrução extra dada ao assistente.') }}</label>
       <select class="form-select" name="scope">{% for s in scopes %}<option value="{{ s }}" {{ 'selected' if g and g.scope == s }}>{{ s }}</option>{% endfor %}</select></div>
-    <div class="col-6 col-md-3"><label class="form-label small">Tipo</label>
+    <div class="col-6 col-md-3"><label class="form-label small">Tipo {{ help('Como o padrão é procurado no texto. keyword: palavras ou termos exatos. regex: expressão de busca avançada (para formatos como CPF).') }}</label>
       <select class="form-select" name="match_type">{% for m in match_types %}<option value="{{ m }}" {{ 'selected' if g and g.match_type == m }}>{{ m }}</option>{% endfor %}</select></div>
-    <div class="col-6 col-md-3"><label class="form-label small">Ação</label>
+    <div class="col-6 col-md-3"><label class="form-label small">Ação {{ help('O que fazer ao encontrar o padrão. block: impede e responde com a mensagem definida. replace: troca o texto. mask: esconde o trecho (ex.: ***). instruct: dá uma orientação ao assistente (só no escopo prompt).') }}</label>
       <select class="form-select" name="action">{% for a in actions %}<option value="{{ a }}" {{ 'selected' if g and g.action == a }}>{{ a }}</option>{% endfor %}</select></div>
-    <div class="col-6 col-md-3"><label class="form-label small">Prioridade</label><input class="form-control" name="priority" type="number" value="{{ g.priority if g else 100 }}"></div>
-    <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="enabled" {{ 'checked' if (not g) or g.enabled }}><label class="form-check-label small">Ativa</label></div></div>
-    <div class="col-12"><label class="form-label small">Padrão (termos separados por vírgula/linha, ou regex)</label>
+    <div class="col-6 col-md-3"><label class="form-label small">Prioridade {{ help('Ordem de aplicação das regras. Números menores são verificados primeiro.') }}</label><input class="form-control" name="priority" type="number" value="{{ g.priority if g else 100 }}"></div>
+    <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="enabled" {{ 'checked' if (not g) or g.enabled }}><label class="form-check-label small">Ativa</label>{{ help('Desmarque para desligar a regra temporariamente sem apagá-la.') }}</div></div>
+    <div class="col-12"><label class="form-label small">Padrão (termos separados por vírgula/linha, ou regex) {{ help('O que a regra procura no texto: uma lista de palavras ou uma expressão regex. Veja os exemplos no campo.') }}</label>
       <textarea class="form-control" name="pattern" rows="2" placeholder="keyword: senha, token, cartão de crédito&#10;regex: \b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b">{{ (g.pattern if g else '') or '' }}</textarea></div>
-    <div class="col-md-6"><label class="form-label small">Resposta (block/replace)</label>
+    <div class="col-md-6"><label class="form-label small">Resposta (block/replace) {{ help('Texto que será mostrado no lugar quando a regra bloquear ou substituir.') }}</label>
       <textarea class="form-control" name="response" rows="2" placeholder="Desculpe, não posso ajudar com isso.">{{ (g.response if g else '') or '' }}</textarea></div>
-    <div class="col-md-6"><label class="form-label small">Instrução (escopo prompt)</label>
+    <div class="col-md-6"><label class="form-label small">Instrução (escopo prompt) {{ help('Orientação em linguagem natural que o assistente passa a seguir em todas as conversas.') }}</label>
       <textarea class="form-control" name="instruction" rows="2" placeholder="Não opine sobre política, partidos ou candidatos. Se perguntarem, diga educadamente que só pode ajudar com assuntos acadêmicos do IFPI.">{{ (g.instruction if g else '') or '' }}</textarea></div>
   </div>
 {% endmacro %}
@@ -24,12 +25,12 @@
   <div class="row g-3">
     <div class="col-md-4"><label class="form-label small">Nome</label><input class="form-control" name="name" value="{{ k.name if k else '' }}" required maxlength="100" placeholder="Consulta de notas"></div>
     <div class="col-md-8"><label class="form-label small">Descrição</label><input class="form-control" name="description" value="{{ (k.description if k else '') or '' }}" placeholder="Use quando o aluno perguntar sobre notas, médias ou boletim"></div>
-    <div class="col-12"><label class="form-label small">Instruções (markdown)</label>
+    <div class="col-12"><label class="form-label small">Instruções (markdown) {{ help('O passo a passo que o assistente segue ao usar esta skill, escrito como texto simples. Pode usar títulos e listas.') }}</label>
       <textarea class="form-control" name="body" rows="8" required placeholder="# Consulta de notas&#10;&#10;1. Pergunte o período letivo se não informado.&#10;2. Use a ferramenta de boletim para buscar as notas.&#10;3. Apresente em lista: disciplina, nota, situação.&#10;&#10;## Regras&#10;- Nunca exiba notas de outro aluno.">{{ (k.body if k else '') or '' }}</textarea></div>
   </div>
 {% endmacro %}
 {% block content %}
-<h1 class="h3 page-title mb-4">Skills</h1>
+<h1 class="h3 page-title mb-4">Skills {{ help('Skill é uma habilidade ensinada ao assistente: um passo a passo para um tipo de pedido (ex.: consultar notas). A descrição diz quando usar; as instruções dizem como fazer. O assistente escolhe a skill certa conforme a pergunta. Clique no nome para editar.', 'O que são skills?') }}</h1>
 {% if msg %}<div class="alert alert-success"><i class="bi bi-check-circle me-1"></i>Ação concluída: {{ msg }}.</div>{% endif %}
 {% if error %}<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-1"></i>{{ error }}</div>{% endif %}
 
@@ -74,7 +75,7 @@
   </div>
 </div>
 
-<h1 class="h3 page-title mb-4">Guardrails</h1>
+<h1 class="h3 page-title mb-4">Guardrails {{ help('Guardrails (“grades de proteção”) são regras de segurança. Elas podem bloquear certos assuntos, esconder dados sensíveis (como CPF) ou orientar o assistente a não opinar sobre certos temas, tanto no que o usuário envia quanto no que o assistente responde.', 'O que são guardrails?') }}</h1>
 <div class="card mb-4">
   <div class="table-responsive">
   <table class="table table-hover mb-0">
@@ -123,7 +124,7 @@
 </div>
 
 <div class="card">
-  <div class="card-header bg-transparent fw-semibold"><i class="bi bi-flask me-1"></i>Testar regras</div>
+  <div class="card-header bg-transparent fw-semibold"><i class="bi bi-flask me-1"></i>Testar regras {{ help('Cole um texto de exemplo para ver quais regras seriam acionadas. Nada é enviado ou salvo.') }}</div>
   <div class="card-body">
     <textarea class="form-control mb-3" id="gr-text" rows="3" maxlength="2000" placeholder="Texto de exemplo (nada é enviado)"></textarea>
     <button class="btn btn-outline-primary" type="button" id="gr-test"><i class="bi bi-play-fill"></i> Testar</button>

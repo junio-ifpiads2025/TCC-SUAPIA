@@ -1,21 +1,23 @@
 {% extends "base.html" %}
+{% from "_help.html" import help %}
 {% block title %}Uso e tokens{% endblock %}
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-  <h1 class="h3 page-title mb-0">Uso e consumo de tokens</h1>
+  <h1 class="h3 page-title mb-0">Uso e consumo de tokens {{ help('Token é a unidade que a IA usa para medir texto: aproximadamente uma sílaba ou pedaço de palavra. Provedores de IA cobram e limitam por tokens, então esta tela mostra quanto o assistente consome ao longo do tempo.', 'O que são tokens?') }}</h1>
   <div class="d-flex gap-2">
     <div class="btn-group btn-group-sm">
       {% for p in periods %}<a class="btn btn-outline-primary {{ 'active' if p == days else '' }}" href="/admin/usage?days={{ p }}">{{ p }} dias</a>{% endfor %}
     </div>
+    <a class="btn btn-outline-secondary btn-sm" href="/admin/usage/export.csv?days={{ days }}"><i class="bi bi-filetype-csv me-1"></i>CSV</a>
     <a class="btn btn-outline-secondary btn-sm" href="/admin/usage/export.pdf?days={{ days }}"><i class="bi bi-file-earmark-pdf me-1"></i>Exportar PDF</a>
   </div>
 </div>
 
 {% set t = report.totals %}
 <div class="row g-3 mb-4">
-  {% for label, value in [('Mensagens respondidas', t.messages), ('Chamadas ao LLM', t.calls), ('Tokens de entrada', t.prompt), ('Tokens de saída', t.completion), ('Total de tokens', t.total), ('Tokens por mensagem', t.avg_tokens_per_message)] %}
+  {% for label, value, tip in [('Mensagens respondidas', t.messages, 'Quantas mensagens de usuários o assistente respondeu no período.'), ('Chamadas ao LLM', t.calls, 'LLM é o modelo de IA que escreve as respostas. Uma mesma mensagem pode exigir várias chamadas (por exemplo, consultar dados e depois redigir).'), ('Tokens de entrada', t.prompt, 'Texto enviado à IA: instruções, histórico da conversa, documentos consultados e a pergunta do usuário.'), ('Tokens de saída', t.completion, 'Texto escrito pela IA nas respostas. Costuma custar mais que a entrada.'), ('Total de tokens', t.total, 'Entrada + saída. É o número que mais pesa no custo e nos limites do provedor.'), ('Tokens por mensagem', t.avg_tokens_per_message, 'Média de tokens gastos para responder cada mensagem. Se subir muito, algo está ficando mais pesado.')] %}
   <div class="col-6 col-md-4 col-xl-2"><div class="card h-100"><div class="card-body">
-    <div class="small text-body-secondary">{{ label }}</div>
+    <div class="small text-body-secondary">{{ label }} {{ help(tip) }}</div>
     <div class="h4 mb-0">{{ '{:,}'.format(value).replace(',', '.') }}</div>
   </div></div></div>
   {% endfor %}
@@ -23,29 +25,29 @@
 
 <div class="row g-3 mb-4">
   <div class="col-12 col-xl-6"><div class="card h-100"><div class="card-body">
-    <h2 class="h6">Tokens por dia</h2><canvas id="chTokens" height="120"></canvas>
+    <h2 class="h6">Tokens por dia {{ help('Evolução do consumo de entrada (azul) e saída (laranja) em cada dia.') }}</h2><canvas id="chTokens" height="120"></canvas>
   </div></div></div>
   <div class="col-12 col-xl-6"><div class="card h-100"><div class="card-body">
-    <h2 class="h6">Mensagens e usuários por dia</h2><canvas id="chMessages" height="120"></canvas>
+    <h2 class="h6">Mensagens e usuários por dia {{ help('Quantas mensagens foram respondidas e quantas pessoas diferentes usaram o assistente em cada dia.') }}</h2><canvas id="chMessages" height="120"></canvas>
   </div></div></div>
   <div class="col-12 col-xl-6"><div class="card h-100"><div class="card-body">
-    <h2 class="h6">Tokens por modelo</h2><canvas id="chModels" height="120"></canvas>
+    <h2 class="h6">Tokens por modelo {{ help('Modelo é a versão da IA usada. Cada um tem tamanho e preço diferentes. Aqui se vê quanto cada um consumiu.') }}</h2><canvas id="chModels" height="120"></canvas>
   </div></div></div>
   <div class="col-12 col-xl-6"><div class="card h-100"><div class="card-body">
-    <h2 class="h6">Consumo por modelo e origem</h2>
+    <h2 class="h6">Consumo por modelo e origem {{ help('Detalha as chamadas à IA. As linhas com ícone de diagrama mostram a origem, ou seja, qual parte do sistema fez a chamada.') }}</h2>
     <table class="table table-sm mb-0">
-      <thead><tr><th>Nome</th><th class="text-end">Chamadas</th><th class="text-end">Entrada</th><th class="text-end">Saída</th><th class="text-end">Total</th></tr></thead>
+      <thead><tr><th>Nome</th><th class="text-end">Chamadas</th><th class="text-end">Entrada</th><th class="text-end">Saída</th><th class="text-end">Total</th><th class="text-end">Custo (US$) {{ help('Estimativa pela tabela de preços configurada (MODEL_PRICES_JSON). Modelos sem preço aparecem com traço.') }}</th></tr></thead>
       <tbody>
-      {% for m in report.by_model %}<tr><td>{{ m.name }}</td><td class="text-end">{{ m.calls }}</td><td class="text-end">{{ m.prompt }}</td><td class="text-end">{{ m.completion }}</td><td class="text-end">{{ m.total }}</td></tr>{% endfor %}
-      {% for m in report.by_source %}<tr class="table-light"><td><i class="bi bi-diagram-2 me-1"></i>{{ m.name }}</td><td class="text-end">{{ m.calls }}</td><td class="text-end">{{ m.prompt }}</td><td class="text-end">{{ m.completion }}</td><td class="text-end">{{ m.total }}</td></tr>{% endfor %}
-      {% if not report.by_model %}<tr><td colspan="5" class="text-center text-body-secondary py-3">Sem chamadas registradas no período.</td></tr>{% endif %}
+      {% for m in report.by_model %}<tr><td>{{ m.name }}</td><td class="text-end">{{ m.calls }}</td><td class="text-end">{{ m.prompt }}</td><td class="text-end">{{ m.completion }}</td><td class="text-end">{{ m.total }}</td><td class="text-end">{{ '%.4f'|format(m.cost) if m.get('cost') is not none else '—' }}</td></tr>{% endfor %}
+      {% for m in report.by_source %}<tr class="table-active"><td><i class="bi bi-diagram-2 me-1"></i>{{ m.name }}</td><td class="text-end">{{ m.calls }}</td><td class="text-end">{{ m.prompt }}</td><td class="text-end">{{ m.completion }}</td><td class="text-end">{{ m.total }}</td><td></td></tr>{% endfor %}
+      {% if not report.by_model %}<tr><td colspan="6" class="text-center text-body-secondary py-3">Sem chamadas registradas no período.</td></tr>{% endif %}
       </tbody>
     </table>
   </div></div></div>
 </div>
 
 <div class="card"><div class="card-body">
-  <h2 class="h6">Detalhamento diário</h2>
+  <h2 class="h6">Detalhamento diário {{ help('Os mesmos números, dia a dia, em tabela. Usuários = pessoas diferentes que conversaram naquele dia.') }}</h2>
   <div class="table-responsive" style="max-height: 420px">
     <table class="table table-sm mb-0">
       <thead><tr><th>Data</th><th class="text-end">Mensagens</th><th class="text-end">Usuários</th><th class="text-end">Chamadas</th><th class="text-end">Entrada</th><th class="text-end">Saída</th><th class="text-end">Total</th></tr></thead>

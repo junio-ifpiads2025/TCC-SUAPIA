@@ -20,32 +20,59 @@ from services.chat import thread_service
 from services.shared.session_service import get_token
 from config import FALLBACK_TEXT, UNKNOWN_COMMAND_TEXT, about_text, menu_text
 
+# Trechos que indicam que o agente não encontrou resposta (textos das tools de
+# busca em rag_agent/_run_knowledge e as formas usuais da resposta final).
+NO_ANSWER_MARKERS = (
+    "não encontrei",
+    "nenhuma informação encontrada",
+    "não tenho informaç",
+    "não sei responder",
+    "não possuo informaç",
+    "não consegui encontrar",
+)
 
-async def route(chat_id: str, message: str) -> tuple[str, list[dict]]:
+
+def _meta(chunks: list | None = None, no_answer: bool = False, ask_feedback: bool = False) -> dict:
+    """
+    Metadados da resposta:
+    - chunks       : metadados dos trechos (manuais/base de conhecimento) usados;
+    - no_answer    : o agente não encontrou resposta;
+    - ask_feedback : resposta do agente que pode ser avaliada (não vale para comandos,
+                     bloqueios de guardrail e falhas).
+    """
+    return {"chunks": chunks or [], "no_answer": no_answer, "ask_feedback": ask_feedback}
+
+
+def is_no_answer(resposta: str, chunks: list | None) -> bool:
+    """Sem trecho recuperado e com texto de "não encontrei" na resposta."""
+    texto = (resposta or "").lower()
+    return not chunks and any(m in texto for m in NO_ANSWER_MARKERS)
+
+
+async def route(chat_id: str, message: str) -> tuple[str, dict]:
     """
     Classifica a mensagem e despacha para o fluxo correto (RF06, RN04).
 
-    Retorna uma tupla (resposta, metadados), onde metadados contém
-    informações de rastreabilidade retornadas pelo agente (ex: chunks RAG usados).
+    Retorna (resposta, metadados); ver `_meta`.
     """
     body = message.strip()
 
     # Comandos estáticos: não acionam o agente nem salvam histórico
     if body == "/menu":
-        return menu_text(prompt_service.agent_name()), []
+        return menu_text(prompt_service.agent_name()), _meta()
 
     if body == "/about":
-        return about_text(prompt_service.agent_name()), []
+        return about_text(prompt_service.agent_name()), _meta()
 
     # Qualquer outro comando desconhecido (RN04)
     if body.startswith("/"):
-        return UNKNOWN_COMMAND_TEXT, []
+        return UNKNOWN_COMMAND_TEXT, _meta()
 
     # Guardrail de entrada: bloqueia sem acionar o LLM
     gr = guardrail_service.check_input(body)
     if gr.blocked:
         access_log_service.log_event(chat_id, "guardrail_input", detail=gr.rule)
-        return gr.response, []
+        return gr.response, _meta()
 
     # Recupera token e histórico de forma concorrente
     token, history = await asyncio.gather(
@@ -60,7 +87,7 @@ async def route(chat_id: str, message: str) -> tuple[str, list[dict]]:
         )
     except Exception as e:
         logger.error("ROUTER", f"route_error chat_id={chat_id} error={e}")
-        return FALLBACK_TEXT, []
+        return FALLBACK_TEXT, _meta()
 
     # Guardrail de saída: mascara/substitui antes de persistir e enviar
     resposta, regras = guardrail_service.apply_output(resposta)
@@ -70,7 +97,8 @@ async def route(chat_id: str, message: str) -> tuple[str, list[dict]]:
     # Persiste o par (pergunta, resposta) no histórico para a próxima mensagem
     await thread_service.append_messages(chat_id, body, resposta)
 
-    return resposta, metadata
+    no_answer = is_no_answer(resposta, metadata)
+    return resposta, _meta(metadata, no_answer=no_answer, ask_feedback=not no_answer)
 
 
 def _call_agent(message: str, token: str, history: list[dict]) -> tuple[str, list[dict]]:

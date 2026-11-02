@@ -1,9 +1,10 @@
 """
 Peças compartilhadas do painel admin: templates Jinja2, sessão e CSRF.
 
-Contrato usado por todos os routers do painel (routes/admin_*.py):
+Contrato usado por todos os routers do painel (routes/admin/<area>.py):
 - `require_admin`  : dependência FastAPI; devolve o admin logado (matrícula SUAP ou
-                     o usuário de bootstrap do .env).
+                     o usuário de bootstrap do .env) e o define em
+                     `audit_service.current_admin` para a auditoria.
 - `verify_csrf`    : dependência para todo POST/PUT/DELETE de formulário/HTMX.
 - `render(request, template, **ctx)` : renderiza web/admin/<template> com
   `request`, `csrf_token` e `admin_user` já no contexto.
@@ -12,6 +13,7 @@ A sessão vive num cookie assinado (itsdangerous) com o usuário e o token CSRF.
 """
 
 import secrets
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import HTTPException, Request
@@ -21,6 +23,7 @@ from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 import config
 from services.admin import admin_user_service
+from services.shared import audit_service
 from config import ADMIN_PASSWORD, ADMIN_SESSION_SECRET, ADMIN_SESSION_TTL_SECONDS, ADMIN_USERNAME  # noqa: F401
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "web" / "admin"
@@ -97,6 +100,8 @@ async def require_admin(request: Request) -> str:
         if request.url.path.startswith("/admin/api/"):
             raise HTTPException(status_code=401, detail="Não autenticado.")
         raise HTTPException(status_code=303, headers={"Location": "/admin/login"})
+    # dependência async roda na mesma task do endpoint: os serviços leem o autor daqui
+    audit_service.current_admin.set(session["u"])
     return session["u"]
 
 
@@ -124,3 +129,11 @@ def render(request: Request, template: str, status_code: int = 200, **ctx) -> HT
     ctx.setdefault("admin_user", session["u"] if session else "admin")
     ctx.setdefault("is_bootstrap", bool(session and session.get("b")))
     return templates.TemplateResponse(request, template, ctx, status_code=status_code)
+
+
+def parse_date(value: str) -> datetime | None:
+    """Data de filtro no formato AAAA-MM-DD (input type=date); inválida vira None."""
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
