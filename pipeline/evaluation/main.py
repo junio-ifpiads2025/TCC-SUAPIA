@@ -2,6 +2,10 @@ import os
 import glob
 from dotenv import load_dotenv
 
+# Carrega as variáveis antes dos imports: interface.rag importa o rag_agent do chat,
+# que lê OPENAI_API_KEY e a configuração do RAG no momento do import.
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
+
 # Importando os nossos próprios módulos
 from utils.data_loader import carregar_dados_qa
 from interface.rag import gerar_dados_para_avaliacao
@@ -10,9 +14,6 @@ from utils.reporter import salvar_relatorio_csv
 
 def main():
     """Função principal que orquestra o fluxo de avaliação."""
-
-    # 0. Carrega as variáveis de ambiente (API Keys e configurações)
-    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
     # 1. Configura os caminhos
     diretorio_atual = os.path.dirname(__file__)

@@ -1,7 +1,14 @@
 ragas
+# ragas 0.4.3 importa langchain_community.chat_models.vertexai, removido no langchain-community 0.4
+langchain-community<0.4
 datasets
 sentence-transformers
 pandas
 langchain-openai
 openai
 python-dotenv
+# Dependências do chat/ importadas por interface/rag.py (rag_agent → prompt_service → models.database)
+langchain-postgres
+psycopg[binary]
+sqlalchemy[asyncio]
+redis[hiredis]

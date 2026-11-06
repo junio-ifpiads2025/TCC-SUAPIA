@@ -4,10 +4,10 @@ from dataclasses import dataclass, field
 from typing import List
 
 # Ajusta o path para importar os serviços do bot
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'chat-bot')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'chat')))
 
-from services.rag_agent import gerar_resposta
-from services.rag_agent import gerar_resposta_com_contexto
+from services.chat.rag_agent import gerar_resposta
+from services.chat.rag_agent import gerar_resposta_com_contexto
 
 
 def _executar_com_contexto(pergunta: str):
